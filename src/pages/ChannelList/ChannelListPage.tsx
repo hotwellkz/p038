@@ -157,7 +157,13 @@ const ChannelListPage = () => {
     const loadSettings = async () => {
       try {
         const settings = await fetchScheduleSettings();
-        setMinIntervalMinutes(settings.minIntervalMinutes || 11);
+        // Используем среднее значение интервалов для обратной совместимости
+        const avgInterval = Math.round(
+          ((settings.minInterval_00_13 ?? 11) + 
+           (settings.minInterval_13_17 ?? 11) + 
+           (settings.minInterval_17_24 ?? 11)) / 3
+        );
+        setMinIntervalMinutes(avgInterval);
       } catch (error) {
         console.error("Failed to load schedule settings:", error);
       }

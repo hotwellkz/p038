@@ -6,12 +6,20 @@ import { Logger } from "../utils/logger";
 const router = Router();
 
 export interface ScheduleSettings {
-  minIntervalMinutes: number;
+  // Старое поле для обратной совместимости (deprecated, используйте minInterval_00_13, minInterval_13_17, minInterval_17_24)
+  minIntervalMinutes?: number;
+  // Новые поля для интервалов по времени суток (в минутах)
+  minInterval_00_13?: number; // 00:00–13:00
+  minInterval_13_17?: number; // 13:00–17:00
+  minInterval_17_24?: number; // 17:00–24:00
   conflictsCheckEnabled: boolean;
 }
 
 const DEFAULT_SETTINGS: ScheduleSettings = {
   minIntervalMinutes: 11,
+  minInterval_00_13: 11,
+  minInterval_13_17: 11,
+  minInterval_17_24: 11,
   conflictsCheckEnabled: true
 };
 
@@ -47,11 +55,22 @@ router.get("/settings", authRequired, async (req, res) => {
 
     const data = snap.data() as Partial<ScheduleSettings> | undefined;
 
+    // Миграция: если есть старое поле minIntervalMinutes, но нет новых полей, копируем его во все три
+    const oldInterval = typeof data?.minIntervalMinutes === "number" 
+      ? data.minIntervalMinutes 
+      : DEFAULT_SETTINGS.minIntervalMinutes;
+
     const settings: ScheduleSettings = {
-      minIntervalMinutes:
-        typeof data?.minIntervalMinutes === "number"
-          ? data.minIntervalMinutes
-          : DEFAULT_SETTINGS.minIntervalMinutes,
+      minIntervalMinutes: oldInterval, // Оставляем для обратной совместимости
+      minInterval_00_13: typeof data?.minInterval_00_13 === "number"
+        ? data.minInterval_00_13
+        : (typeof data?.minIntervalMinutes === "number" ? data.minIntervalMinutes : DEFAULT_SETTINGS.minInterval_00_13),
+      minInterval_13_17: typeof data?.minInterval_13_17 === "number"
+        ? data.minInterval_13_17
+        : (typeof data?.minIntervalMinutes === "number" ? data.minIntervalMinutes : DEFAULT_SETTINGS.minInterval_13_17),
+      minInterval_17_24: typeof data?.minInterval_17_24 === "number"
+        ? data.minInterval_17_24
+        : (typeof data?.minIntervalMinutes === "number" ? data.minIntervalMinutes : DEFAULT_SETTINGS.minInterval_17_24),
       conflictsCheckEnabled:
         typeof data?.conflictsCheckEnabled === "boolean"
           ? data.conflictsCheckEnabled
@@ -87,10 +106,17 @@ router.patch("/settings", authRequired, async (req, res) => {
 
   try {
     const userId = req.user!.uid;
-    const { minIntervalMinutes, conflictsCheckEnabled } = req.body as Partial<ScheduleSettings>;
+    const { 
+      minIntervalMinutes, 
+      minInterval_00_13, 
+      minInterval_13_17, 
+      minInterval_17_24,
+      conflictsCheckEnabled 
+    } = req.body as Partial<ScheduleSettings>;
 
     const updates: Partial<ScheduleSettings> = {};
 
+    // Валидация и обновление старых полей (для обратной совместимости)
     if (typeof minIntervalMinutes !== "undefined") {
       if (
         typeof minIntervalMinutes !== "number" ||
@@ -105,6 +131,36 @@ router.patch("/settings", authRequired, async (req, res) => {
 
       const clamped = Math.max(1, Math.min(60, minIntervalMinutes));
       updates.minIntervalMinutes = clamped;
+    }
+
+    // Валидация и обновление новых полей
+    const validateInterval = (value: number | undefined, fieldName: string): number | undefined => {
+      if (typeof value === "undefined") return undefined;
+      if (
+        typeof value !== "number" ||
+        !Number.isFinite(value) ||
+        !Number.isInteger(value)
+      ) {
+        throw new Error(`${fieldName} должен быть целым числом`);
+      }
+      return Math.max(1, Math.min(60, value));
+    };
+
+    try {
+      if (typeof minInterval_00_13 !== "undefined") {
+        updates.minInterval_00_13 = validateInterval(minInterval_00_13, "minInterval_00_13");
+      }
+      if (typeof minInterval_13_17 !== "undefined") {
+        updates.minInterval_13_17 = validateInterval(minInterval_13_17, "minInterval_13_17");
+      }
+      if (typeof minInterval_17_24 !== "undefined") {
+        updates.minInterval_17_24 = validateInterval(minInterval_17_24, "minInterval_17_24");
+      }
+    } catch (validationError: any) {
+      return res.status(400).json({
+        error: "Invalid request",
+        message: validationError.message
+      });
     }
 
     if (typeof conflictsCheckEnabled !== "undefined") {
@@ -130,11 +186,22 @@ router.patch("/settings", authRequired, async (req, res) => {
     const snap = await docRef.get();
     const data = snap.data() as Partial<ScheduleSettings> | undefined;
 
+    // Миграция: если есть старое поле, но нет новых, копируем его
+    const oldInterval = typeof data?.minIntervalMinutes === "number" 
+      ? data.minIntervalMinutes 
+      : DEFAULT_SETTINGS.minIntervalMinutes;
+
     const settings: ScheduleSettings = {
-      minIntervalMinutes:
-        typeof data?.minIntervalMinutes === "number"
-          ? data.minIntervalMinutes
-          : DEFAULT_SETTINGS.minIntervalMinutes,
+      minIntervalMinutes: oldInterval,
+      minInterval_00_13: typeof data?.minInterval_00_13 === "number"
+        ? data.minInterval_00_13
+        : oldInterval,
+      minInterval_13_17: typeof data?.minInterval_13_17 === "number"
+        ? data.minInterval_13_17
+        : oldInterval,
+      minInterval_17_24: typeof data?.minInterval_17_24 === "number"
+        ? data.minInterval_17_24
+        : oldInterval,
       conflictsCheckEnabled:
         typeof data?.conflictsCheckEnabled === "boolean"
           ? data.conflictsCheckEnabled

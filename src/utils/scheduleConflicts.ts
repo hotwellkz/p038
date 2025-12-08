@@ -1,4 +1,6 @@
 import type { ChannelScheduleItem } from "../api/channelSchedule";
+import type { ScheduleSettings } from "../api/scheduleSettings";
+import { getMinIntervalForMinutes } from "../api/scheduleSettings";
 
 export type ConflictKey = string; // `${channelId}-${time}`
 
@@ -11,12 +13,15 @@ interface TimePoint {
 
 /**
  * Рассчитывает набор конфликтующих времён между всеми каналами.
- * Конфликт — когда расстояние между двумя публикациями меньше minIntervalMinutes,
- * учитывая переход через полночь.
+ * Конфликт — когда расстояние между двумя публикациями меньше минимального интервала
+ * для соответствующего времени суток, учитывая переход через полночь.
+ * 
+ * @param channels - Список каналов с расписаниями
+ * @param settings - Настройки расписания (содержат интервалы по времени суток)
  */
 export function calculateScheduleConflicts(
   channels: ChannelScheduleItem[],
-  minIntervalMinutes: number
+  settings: ScheduleSettings
 ): Set<ConflictKey> {
   const conflictSet = new Set<ConflictKey>();
 
@@ -68,7 +73,12 @@ export function calculateScheduleConflicts(
     const current = points[i];
     const next = points[i + 1];
     const diff = next.minutes - current.minutes;
-    if (diff < minIntervalMinutes) {
+    
+    // Используем интервал для времени следующей публикации (более строгий подход)
+    // Можно также использовать максимум из интервалов для обеих публикаций
+    const requiredInterval = getMinIntervalForMinutes(next.minutes, settings);
+    
+    if (diff < requiredInterval) {
       markConflict(current, next);
     }
   }
@@ -77,7 +87,11 @@ export function calculateScheduleConflicts(
   const first = points[0];
   const last = points[points.length - 1];
   const wrapDiff = first.minutes + 1440 - last.minutes;
-  if (wrapDiff < minIntervalMinutes) {
+  
+  // Используем интервал для времени первой публикации (которая идет после последней через полночь)
+  const requiredIntervalWrap = getMinIntervalForMinutes(first.minutes, settings);
+  
+  if (wrapDiff < requiredIntervalWrap) {
     markConflict(last, first);
   }
 

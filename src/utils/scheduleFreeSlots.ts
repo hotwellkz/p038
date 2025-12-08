@@ -1,4 +1,6 @@
 import type { ChannelScheduleItem } from "../api/channelSchedule";
+import type { ScheduleSettings } from "../api/scheduleSettings";
+import { getMinIntervalForMinutes } from "../api/scheduleSettings";
 
 export type ChannelSchedule = {
   id: string;
@@ -42,13 +44,16 @@ export function minutesToHHMM(m: number): string {
 
 /**
  * Рассчитывает свободные интервалы времени суток, в которые можно ставить новые публикации,
- * чтобы расстояние до ЛЮБОЙ существующей публикации было >= minIntervalMinutes.
+ * чтобы расстояние до ЛЮБОЙ существующей публикации было >= минимального интервала
+ * для соответствующего времени суток.
+ * 
+ * @param channels - Список каналов с расписаниями
+ * @param settings - Настройки расписания (содержат интервалы по времени суток)
  */
 export function calculateFreeRanges(
   channels: ChannelSchedule[],
-  minIntervalMinutes: number
+  settings: ScheduleSettings
 ): FreeRange[] {
-  const clampedInterval = Math.max(1, Math.min(60, minIntervalMinutes || 1));
 
   if (!channels || channels.length === 0) {
     // Если нет ни одной публикации, всё сутки свободны
@@ -84,9 +89,13 @@ export function calculateFreeRanges(
 
   // Массив занятых минут
   const isBlocked = new Array<boolean>(1440).fill(false);
-  const radius = clampedInterval - 1;
 
+  // Для каждой занятой минуты блокируем интервал с учетом минимального интервала для этого времени
   for (const t of usedMinutes) {
+    const intervalForTime = getMinIntervalForMinutes(t, settings);
+    const clampedInterval = Math.max(1, Math.min(60, intervalForTime));
+    const radius = clampedInterval - 1;
+    
     const start = Math.max(0, t - radius);
     const end = Math.min(1439, t + radius);
     for (let m = start; m <= end; m++) {
@@ -105,6 +114,9 @@ export function calculateFreeRanges(
       }
     } else if (currentStart !== null) {
       const end = m - 1;
+      // Проверяем, что диапазон достаточно длинный для минимального интервала в его начале
+      const minIntervalForStart = getMinIntervalForMinutes(currentStart, settings);
+      const clampedInterval = Math.max(1, Math.min(60, minIntervalForStart));
       const length = end - currentStart + 1;
       if (length >= clampedInterval) {
         ranges.push({ startMinutes: currentStart, endMinutes: end });
@@ -116,6 +128,8 @@ export function calculateFreeRanges(
   // Хвостовой диапазон до конца суток
   if (currentStart !== null) {
     const end = 1439;
+    const minIntervalForStart = getMinIntervalForMinutes(currentStart, settings);
+    const clampedInterval = Math.max(1, Math.min(60, minIntervalForStart));
     const length = end - currentStart + 1;
     if (length >= clampedInterval) {
       ranges.push({ startMinutes: currentStart, endMinutes: end });
@@ -130,14 +144,18 @@ export function calculateFreeRanges(
 
 /**
  * Генерирует список предложенных слотов в рамках свободных диапазонов.
- * Каждый слот отстоит от соседнего не менее чем на minIntervalMinutes.
+ * Каждый слот отстоит от соседнего не менее чем на минимальный интервал
+ * для соответствующего времени суток.
+ * 
+ * @param ranges - Свободные диапазоны времени
+ * @param settings - Настройки расписания (содержат интервалы по времени суток)
+ * @param maxSlots - Максимальное количество слотов для генерации
  */
 export function generateSuggestedSlots(
   ranges: FreeRange[],
-  minIntervalMinutes: number,
+  settings: ScheduleSettings,
   maxSlots: number = 200
 ): SuggestedSlot[] {
-  const clampedInterval = Math.max(1, Math.min(60, minIntervalMinutes || 1));
   const slots: SuggestedSlot[] = [];
 
   for (const range of ranges) {
@@ -147,6 +165,10 @@ export function generateSuggestedSlots(
       if (slots.length >= maxSlots) {
         return slots.sort((a, b) => a.minutes - b.minutes);
       }
+      
+      // Используем интервал для текущего времени
+      const intervalForCurrent = getMinIntervalForMinutes(current, settings);
+      const clampedInterval = Math.max(1, Math.min(60, intervalForCurrent));
       current += clampedInterval;
     }
   }

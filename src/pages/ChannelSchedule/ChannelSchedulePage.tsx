@@ -10,7 +10,8 @@ import { calculateScheduleConflicts, type ConflictKey } from "../../utils/schedu
 import {
   fetchScheduleSettings,
   updateScheduleSettings,
-  type ScheduleSettings
+  type ScheduleSettings,
+  getMinIntervalForMinutes
 } from "../../api/scheduleSettings";
 import {
   calculateFreeRanges,
@@ -35,10 +36,16 @@ const ChannelSchedulePage = () => {
   const [conflicts, setConflicts] = useState<Set<ConflictKey>>(new Set());
   const [settings, setSettings] = useState<ScheduleSettings>({
     minIntervalMinutes: 11,
+    minInterval_00_13: 11,
+    minInterval_13_17: 11,
+    minInterval_17_24: 11,
     conflictsCheckEnabled: true
   });
   const [settingsDraft, setSettingsDraft] = useState<ScheduleSettings>({
     minIntervalMinutes: 11,
+    minInterval_00_13: 11,
+    minInterval_13_17: 11,
+    minInterval_17_24: 11,
     conflictsCheckEnabled: true
   });
   const [settingsLoading, setSettingsLoading] = useState(true);
@@ -117,20 +124,19 @@ const ChannelSchedulePage = () => {
         return;
       }
 
-      const interval = Math.max(1, Math.min(60, settings.minIntervalMinutes || 11));
-      const conflictSet = calculateScheduleConflicts(scheduleItems, interval);
+      const conflictSet = calculateScheduleConflicts(scheduleItems, settings);
       setConflicts(conflictSet);
 
       const ranges = calculateFreeRanges(
         mapItemsToChannelSchedule(scheduleItems),
-        interval
+        settings
       );
       setFreeRanges(ranges);
 
-      const slots = generateSuggestedSlots(ranges, interval);
+      const slots = generateSuggestedSlots(ranges, settings);
       setSuggestedSlots(slots);
     }
-  }, [scheduleItems, loading, error, settings.conflictsCheckEnabled, settings.minIntervalMinutes]);
+  }, [scheduleItems, loading, error, settings.conflictsCheckEnabled, settings.minInterval_00_13, settings.minInterval_13_17, settings.minInterval_17_24]);
 
   // Вычисляем активный временной слот и следующий ближайший слот
   useEffect(() => {
@@ -147,7 +153,13 @@ const ChannelSchedulePage = () => {
 
     // Функция пересчёта активного и следующего слота
     const recalculateTimes = () => {
-      const minInterval = Math.max(1, Math.min(60, settings.minIntervalMinutes || 11));
+      // Используем средний интервал для расчета активного времени (для обратной совместимости)
+      const avgInterval = Math.round(
+        ((settings.minInterval_00_13 ?? 11) + 
+         (settings.minInterval_13_17 ?? 11) + 
+         (settings.minInterval_17_24 ?? 11)) / 3
+      );
+      const minInterval = Math.max(1, Math.min(60, avgInterval));
       
       // Получаем текущее время
       const now = new Date();
@@ -233,7 +245,7 @@ const ChannelSchedulePage = () => {
     }, 30_000); // 30 секунд
 
     return () => clearInterval(intervalId);
-  }, [scheduleItems, loading, error, settings.minIntervalMinutes]);
+  }, [scheduleItems, loading, error, settings.minInterval_00_13, settings.minInterval_13_17, settings.minInterval_17_24]);
 
   // Обратный отсчёт в секундах
   useEffect(() => {
@@ -248,7 +260,9 @@ const ChannelSchedulePage = () => {
       const nowSeconds = nowMinutes * 60 + now.getSeconds();
 
       const startSeconds = activeSlotStartMinutes * 60;
-      const minIntervalSeconds = settings.minIntervalMinutes * 60;
+      // Используем интервал для времени начала активного слота
+      const minIntervalForSlot = getMinIntervalForMinutes(activeSlotStartMinutes, settings);
+      const minIntervalSeconds = minIntervalForSlot * 60;
 
       // Учёт перехода через полночь
       let diff = nowSeconds - startSeconds;
@@ -269,7 +283,7 @@ const ChannelSchedulePage = () => {
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [activeSlotStartMinutes, settings.minIntervalMinutes]);
+  }, [activeSlotStartMinutes, settings]);
 
   // Расчёт прошедшего времени после предыдущей публикации
   useEffect(() => {
@@ -308,15 +322,27 @@ const ChannelSchedulePage = () => {
   };
 
   const handleSaveSettings = async () => {
-    const value = settingsDraft.minIntervalMinutes;
+    // Валидация всех трех интервалов
+    const validateInterval = (value: number | undefined, name: string): boolean => {
+      if (typeof value === "undefined") return false;
+      if (
+        typeof value !== "number" ||
+        !Number.isFinite(value) ||
+        !Number.isInteger(value) ||
+        value < 1 ||
+        value > 60
+      ) {
+        setSettingsError(`${name} должен быть целым числом от 1 до 60 минут`);
+        return false;
+      }
+      return true;
+    };
+
     if (
-      typeof value !== "number" ||
-      !Number.isFinite(value) ||
-      !Number.isInteger(value) ||
-      value < 1 ||
-      value > 60
+      !validateInterval(settingsDraft.minInterval_00_13, "Интервал для 00:00–13:00") ||
+      !validateInterval(settingsDraft.minInterval_13_17, "Интервал для 13:00–17:00") ||
+      !validateInterval(settingsDraft.minInterval_17_24, "Интервал для 17:00–24:00")
     ) {
-      setSettingsError("Интервал должен быть целым числом от 1 до 60 минут");
       return;
     }
 
@@ -326,7 +352,10 @@ const ChannelSchedulePage = () => {
 
     try {
       const updated = await updateScheduleSettings({
-        minIntervalMinutes: value,
+        minIntervalMinutes: settingsDraft.minIntervalMinutes, // Для обратной совместимости
+        minInterval_00_13: settingsDraft.minInterval_00_13!,
+        minInterval_13_17: settingsDraft.minInterval_13_17!,
+        minInterval_17_24: settingsDraft.minInterval_17_24!,
         conflictsCheckEnabled: settingsDraft.conflictsCheckEnabled
       });
       setSettings(updated);
@@ -426,33 +455,21 @@ const ChannelSchedulePage = () => {
                         />
                         <span>Проверять конфликты в расписании</span>
                       </label>
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-slate-200">
-                          Минимальный интервал между публикациями (мин):
-                        </span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={60}
-                          step={1}
-                          value={settingsDraft.minIntervalMinutes}
-                          onChange={(e) =>
-                            handleSettingsChange({
-                              minIntervalMinutes: Number(e.target.value) || 0
-                            })
-                          }
-                          disabled={settingsLoading || isSavingSettings}
-                          className="w-20 rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1 text-sm text-white outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/40 disabled:opacity-50"
-                        />
-                      </div>
                       <button
                         type="button"
                         onClick={handleSaveSettings}
                         disabled={
                           settingsLoading ||
                           isSavingSettings ||
-                          settingsDraft.minIntervalMinutes < 1 ||
-                          settingsDraft.minIntervalMinutes > 60
+                          !settingsDraft.minInterval_00_13 ||
+                          settingsDraft.minInterval_00_13 < 1 ||
+                          settingsDraft.minInterval_00_13 > 60 ||
+                          !settingsDraft.minInterval_13_17 ||
+                          settingsDraft.minInterval_13_17 < 1 ||
+                          settingsDraft.minInterval_13_17 > 60 ||
+                          !settingsDraft.minInterval_17_24 ||
+                          settingsDraft.minInterval_17_24 < 1 ||
+                          settingsDraft.minInterval_17_24 > 60
                         }
                         className="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:opacity-50"
                       >
@@ -461,10 +478,91 @@ const ChannelSchedulePage = () => {
                     </div>
                   </div>
 
-                  <p className="text-xs text-slate-400">
-                    Если разница между двумя публикациями меньше указанного количества минут, время
-                    будет подсвечиваться красным.
-                  </p>
+                  <div className="mt-4">
+                    <p className="mb-2 text-sm font-medium text-slate-200">
+                      Минимальный интервал между публикациями (мин):
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="border-b border-white/10">
+                            <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">
+                              Время суток
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-slate-400">
+                              Интервал (мин)
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b border-white/5">
+                            <td className="px-3 py-2 text-sm text-slate-200">00:00 – 13:00</td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min={1}
+                                max={60}
+                                step={1}
+                                value={settingsDraft.minInterval_00_13 ?? 11}
+                                onChange={(e) =>
+                                  handleSettingsChange({
+                                    minInterval_00_13: Number(e.target.value) || 0
+                                  })
+                                }
+                                disabled={settingsLoading || isSavingSettings}
+                                className="w-20 rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1 text-sm text-white outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/40 disabled:opacity-50"
+                                title="Интервал применяется только к публикациям, попадающим в этот диапазон времени суток"
+                              />
+                            </td>
+                          </tr>
+                          <tr className="border-b border-white/5">
+                            <td className="px-3 py-2 text-sm text-slate-200">13:00 – 17:00</td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min={1}
+                                max={60}
+                                step={1}
+                                value={settingsDraft.minInterval_13_17 ?? 11}
+                                onChange={(e) =>
+                                  handleSettingsChange({
+                                    minInterval_13_17: Number(e.target.value) || 0
+                                  })
+                                }
+                                disabled={settingsLoading || isSavingSettings}
+                                className="w-20 rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1 text-sm text-white outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/40 disabled:opacity-50"
+                                title="Интервал применяется только к публикациям, попадающим в этот диапазон времени суток"
+                              />
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="px-3 py-2 text-sm text-slate-200">17:00 – 24:00</td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min={1}
+                                max={60}
+                                step={1}
+                                value={settingsDraft.minInterval_17_24 ?? 11}
+                                onChange={(e) =>
+                                  handleSettingsChange({
+                                    minInterval_17_24: Number(e.target.value) || 0
+                                  })
+                                }
+                                disabled={settingsLoading || isSavingSettings}
+                                className="w-20 rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1 text-sm text-white outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/40 disabled:opacity-50"
+                                title="Интервал применяется только к публикациям, попадающим в этот диапазон времени суток"
+                              />
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-400">
+                      Интервал применяется только к публикациям, попадающим в соответствующий диапазон времени суток.
+                    </p>
+                  </div>
+
 
                   {settingsError && (
                     <div className="mt-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
@@ -488,8 +586,7 @@ const ChannelSchedulePage = () => {
                         Обнаружены конфликты в расписании.
                       </p>
                       <p className="mt-1 text-amber-100/90">
-                        Некоторые публикации стоят ближе, чем через {settings.minIntervalMinutes}{" "}
-                        минут. Отредактируйте подсвеченные времена, если хотите избежать пересечений.
+                        Некоторые публикации стоят ближе, чем требуется по минимальным интервалам для соответствующих диапазонов времени суток. Отредактируйте подсвеченные времена, если хотите избежать пересечений.
                       </p>
                     </div>
                   </div>
@@ -535,20 +632,85 @@ const ChannelSchedulePage = () => {
                       <span className="text-slate-200">
                         Минимальный интервал между публикациями (мин):
                       </span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={60}
-                        step={1}
-                        value={settingsDraft.minIntervalMinutes}
-                        onChange={(e) =>
-                          handleSettingsChange({
-                            minIntervalMinutes: Number(e.target.value) || 0
-                          })
-                        }
-                        disabled={settingsLoading || isSavingSettings}
-                        className="w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/40 disabled:opacity-50"
-                      />
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="border-b border-white/10">
+                              <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-400">
+                                Время суток
+                              </th>
+                              <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-400">
+                                Интервал (мин)
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr className="border-b border-white/5">
+                              <td className="px-2 py-1.5 text-xs text-slate-200">00:00 – 13:00</td>
+                              <td className="px-2 py-1.5">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={60}
+                                  step={1}
+                                  value={settingsDraft.minInterval_00_13 ?? 11}
+                                  onChange={(e) =>
+                                    handleSettingsChange({
+                                      minInterval_00_13: Number(e.target.value) || 0
+                                    })
+                                  }
+                                  disabled={settingsLoading || isSavingSettings}
+                                  className="w-full rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1 text-xs text-white outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/40 disabled:opacity-50"
+                                  title="Интервал применяется только к публикациям, попадающим в этот диапазон времени суток"
+                                />
+                              </td>
+                            </tr>
+                            <tr className="border-b border-white/5">
+                              <td className="px-2 py-1.5 text-xs text-slate-200">13:00 – 17:00</td>
+                              <td className="px-2 py-1.5">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={60}
+                                  step={1}
+                                  value={settingsDraft.minInterval_13_17 ?? 11}
+                                  onChange={(e) =>
+                                    handleSettingsChange({
+                                      minInterval_13_17: Number(e.target.value) || 0
+                                    })
+                                  }
+                                  disabled={settingsLoading || isSavingSettings}
+                                  className="w-full rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1 text-xs text-white outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/40 disabled:opacity-50"
+                                  title="Интервал применяется только к публикациям, попадающим в этот диапазон времени суток"
+                                />
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="px-2 py-1.5 text-xs text-slate-200">17:00 – 24:00</td>
+                              <td className="px-2 py-1.5">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={60}
+                                  step={1}
+                                  value={settingsDraft.minInterval_17_24 ?? 11}
+                                  onChange={(e) =>
+                                    handleSettingsChange({
+                                      minInterval_17_24: Number(e.target.value) || 0
+                                    })
+                                  }
+                                  disabled={settingsLoading || isSavingSettings}
+                                  className="w-full rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1 text-xs text-white outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/40 disabled:opacity-50"
+                                  title="Интервал применяется только к публикациям, попадающим в этот диапазон времени суток"
+                                />
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Интервал применяется только к публикациям, попадающим в соответствующий диапазон времени суток.
+                      </p>
                     </div>
 
                     <button
@@ -557,18 +719,20 @@ const ChannelSchedulePage = () => {
                       disabled={
                         settingsLoading ||
                         isSavingSettings ||
-                        settingsDraft.minIntervalMinutes < 1 ||
-                        settingsDraft.minIntervalMinutes > 60
+                        !settingsDraft.minInterval_00_13 ||
+                        settingsDraft.minInterval_00_13 < 1 ||
+                        settingsDraft.minInterval_00_13 > 60 ||
+                        !settingsDraft.minInterval_13_17 ||
+                        settingsDraft.minInterval_13_17 < 1 ||
+                        settingsDraft.minInterval_13_17 > 60 ||
+                        !settingsDraft.minInterval_17_24 ||
+                        settingsDraft.minInterval_17_24 < 1 ||
+                        settingsDraft.minInterval_17_24 > 60
                       }
                       className="w-full min-h-[40px] rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:opacity-50"
                     >
                       {isSavingSettings ? "Сохранение..." : "Сохранить"}
                     </button>
-
-                    <p className="text-xs text-slate-400">
-                      Если разница между двумя публикациями меньше указанного количества минут, время
-                      будет подсвечиваться красным.
-                    </p>
 
                     {settingsError && (
                       <div className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
@@ -591,8 +755,7 @@ const ChannelSchedulePage = () => {
                             Обнаружены конфликты в расписании.
                           </p>
                           <p className="mt-1 text-amber-100/90">
-                            Некоторые публикации стоят ближе, чем через {settings.minIntervalMinutes}{" "}
-                            минут. Отредактируйте подсвеченные времена, если хотите избежать пересечений.
+                            Некоторые публикации стоят ближе, чем требуется по минимальным интервалам для соответствующих диапазонов времени суток. Отредактируйте подсвеченные времена, если хотите избежать пересечений.
                           </p>
                         </div>
                       </div>
@@ -614,8 +777,7 @@ const ChannelSchedulePage = () => {
                           Свободные окна для новых публикаций
                         </p>
                         <p className="mt-1 text-xs text-slate-400">
-                          Показываются интервалы и возможные слоты с интервалом не менее{" "}
-                          {settings.minIntervalMinutes} минут от всех публикаций.
+                          Показываются интервалы и возможные слоты с интервалом не менее минимального интервала для соответствующего диапазона времени суток от всех публикаций.
                         </p>
                       </div>
                     </div>
@@ -635,8 +797,10 @@ const ChannelSchedulePage = () => {
                             {(showAllRanges ? freeRanges : freeRanges.slice(0, 10)).map(
                               (range, idx) => {
                                 const length = range.endMinutes - range.startMinutes + 1;
+                                // Используем интервал для начала диапазона
+                                const intervalForRange = getMinIntervalForMinutes(range.startMinutes, settings);
                                 const maxSlots = Math.floor(
-                                  length / Math.max(1, settings.minIntervalMinutes || 1)
+                                  length / Math.max(1, intervalForRange)
                                 );
                                 const fromH = Math.floor(range.startMinutes / 60)
                                   .toString()
@@ -741,8 +905,7 @@ const ChannelSchedulePage = () => {
                     >
                       <div className="space-y-3">
                         <p className="text-xs text-slate-400">
-                          Показываются интервалы и возможные слоты с интервалом не менее{" "}
-                          {settings.minIntervalMinutes} минут от всех публикаций.
+                          Показываются интервалы и возможные слоты с интервалом не менее минимального интервала для соответствующего диапазона времени суток от всех публикаций.
                         </p>
                         <div>
                           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -752,8 +915,10 @@ const ChannelSchedulePage = () => {
                             {(showAllRanges ? freeRanges : freeRanges.slice(0, 10)).map(
                               (range, idx) => {
                                 const length = range.endMinutes - range.startMinutes + 1;
+                                // Используем интервал для начала диапазона
+                                const intervalForRange = getMinIntervalForMinutes(range.startMinutes, settings);
                                 const maxSlots = Math.floor(
-                                  length / Math.max(1, settings.minIntervalMinutes || 1)
+                                  length / Math.max(1, intervalForRange)
                                 );
                                 const fromH = Math.floor(range.startMinutes / 60)
                                   .toString()
@@ -863,7 +1028,11 @@ const ChannelSchedulePage = () => {
               activeTime={activeTime}
               animateActiveTime={animateActiveTime}
               remainingSeconds={remainingSeconds}
-              minIntervalMinutes={settings.minIntervalMinutes}
+              minIntervalMinutes={Math.round(
+                ((settings.minInterval_00_13 ?? 11) + 
+                 (settings.minInterval_13_17 ?? 11) + 
+                 (settings.minInterval_17_24 ?? 11)) / 3
+              )}
               nextTime={nextTime}
               previousTime={previousTime}
               previousElapsedSeconds={previousElapsedSeconds}
