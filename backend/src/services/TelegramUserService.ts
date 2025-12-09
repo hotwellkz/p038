@@ -456,11 +456,23 @@ export async function getIntegrationStatus(
   phoneNumber?: string;
   lastError?: string | null;
 }> {
+  Logger.info("getIntegrationStatus: Getting status for user", { userId });
+  
   const integration = await findTelegramIntegrationByUserId(userId);
   
   if (!integration) {
+    Logger.info("getIntegrationStatus: No integration found", { userId });
     return { status: "not_connected" };
   }
+
+  Logger.info("getIntegrationStatus: Integration found", {
+    userId,
+    integrationId: integration.id,
+    status: integration.status,
+    phoneNumber: integration.phoneNumber ? integration.phoneNumber.replace(/(\d{3})(\d{3})(\d{2})(\d{2})/, "+$1***$4") : undefined,
+    hasSession: !!integration.sessionEncrypted,
+    lastError: integration.lastError
+  });
 
   return {
     status: integration.status,

@@ -773,32 +773,67 @@ export async function downloadAndUploadVideoToDrive(
       // Уведомления в Telegram (если включены)
       try {
         if (channelData.uploadNotificationEnabled === true) {
-          const chatId = channelData.uploadNotificationChatId?.trim() || SYNX_CHAT_ID;
+          // Определяем chatId для уведомления:
+          // 1. Если указан uploadNotificationChatId - используем его
+          // 2. Если нет, но есть telegramSyntaxPeer - используем его (для совместимости с предыдущей логикой)
+          // 3. Иначе используем SYNX_CHAT_ID из env
+          const notificationChatId = channelData.uploadNotificationChatId?.trim() || 
+                                     channelData.telegramSyntaxPeer?.trim() || 
+                                     SYNX_CHAT_ID;
 
-          if (chatId) {
+          if (notificationChatId) {
+            Logger.info("Sending video upload notification", {
+              channelId,
+              userId,
+              generationTransport: transport,
+              notificationChatId,
+              uploadNotificationChatId: channelData.uploadNotificationChatId,
+              telegramSyntaxPeer: channelData.telegramSyntaxPeer,
+              envSyntxChatId: SYNX_CHAT_ID
+            });
+
             await sendVideoUploadNotification({
-              chatId,
+              chatId: notificationChatId,
               channelName: channelData.name || `channel_${channelId}`,
               fileName: driveFileName,
               webViewLink: driveResult.webViewLink,
               webContentLink: driveResult.webContentLink,
               sizeBytes: undefined,
-              uploadedAt: new Date()
+              uploadedAt: new Date(),
+              userId: transport === "telegram_user" ? userId : undefined,
+              generationTransport: transport
             });
           } else {
             Logger.warn("Video upload notification is enabled but no chatId is available", {
               channelId,
               uploadNotificationChatId: channelData.uploadNotificationChatId,
+              telegramSyntaxPeer: channelData.telegramSyntaxPeer,
               envSyntxChatIdSet: !!SYNX_CHAT_ID
             });
           }
         }
       } catch (notifyError: any) {
         // Ошибки при отправке уведомления не ломают загрузку файла
-        Logger.error("Error while sending video upload notification", {
-          channelId,
-          error: notifyError?.message || String(notifyError)
-        });
+        const errorCode = notifyError?.errorCode || notifyError?.code;
+        const errorMessage = String(notifyError?.message ?? notifyError);
+
+        if (errorCode === "TELEGRAM_SESSION_INVALID" || errorMessage.includes("AUTH_KEY_UNREGISTERED")) {
+          Logger.error("Error while sending video upload notification: TELEGRAM_SESSION_INVALID", {
+            channelId,
+            userId,
+            generationTransport: transport,
+            error: errorMessage,
+            errorCode
+          });
+        } else {
+          Logger.error("Error while sending video upload notification", {
+            channelId,
+            userId,
+            generationTransport: transport,
+            error: errorMessage,
+            errorCode
+          });
+        }
       }
 
       // Шаг 3: Удаляем временный файл

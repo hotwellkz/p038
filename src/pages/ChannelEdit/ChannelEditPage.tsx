@@ -80,6 +80,7 @@ const ChannelEditPage = () => {
   const [testingBlottata, setTestingBlottata] = useState(false);
   const [blottataTestResult, setBlottataTestResult] = useState<string | null>(null);
   const [telegramStatus, setTelegramStatus] = useState<{ status: string } | null>(null);
+  const [telegramStatusLoading, setTelegramStatusLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.uid || !channelId) {
@@ -112,17 +113,33 @@ const ChannelEditPage = () => {
   // Загружаем статус Telegram интеграции
   useEffect(() => {
     const loadTelegramStatus = async () => {
+      if (!user?.uid) {
+        setTelegramStatusLoading(false);
+        return;
+      }
+      
       try {
+        setTelegramStatusLoading(true);
         const status = await getTelegramStatus();
+        console.log("ChannelEditPage: Telegram status loaded", {
+          status: status?.status,
+          phoneNumber: status?.phoneNumber,
+          lastError: status?.lastError
+        });
         setTelegramStatus(status);
-      } catch (err) {
+      } catch (err: any) {
+        console.error("ChannelEditPage: Failed to load Telegram status", {
+          error: err?.message || String(err),
+          userId: user?.uid
+        });
         // Если интеграция не найдена или ошибка, считаем что не привязан
         setTelegramStatus({ status: "not_connected" });
+      } finally {
+        setTelegramStatusLoading(false);
       }
     };
-    if (user?.uid) {
-      void loadTelegramStatus();
-    }
+    
+    void loadTelegramStatus();
   }, [user?.uid]);
 
   useEffect(() => {
@@ -249,7 +266,7 @@ const ChannelEditPage = () => {
       }
       
       // Проверяем статус Telegram интеграции
-      if (telegramStatus?.status !== "active") {
+      if (!telegramStatusLoading && telegramStatus?.status !== "active") {
         setError("Для использования личного Telegram аккаунта необходимо привязать Telegram в настройках профиля");
         return;
       }
@@ -679,7 +696,7 @@ const ChannelEditPage = () => {
               {channel.generationTransport === "telegram_user" && (
                 <div className="mt-4 space-y-3">
                   {/* Проверка статуса Telegram интеграции */}
-                  {telegramStatus?.status !== "active" && (
+                  {!telegramStatusLoading && telegramStatus?.status !== "active" && (
                     <div className="rounded-lg border border-amber-500/30 bg-amber-900/20 p-3">
                       <div className="flex items-start gap-2">
                         <div className="flex-1">
@@ -719,7 +736,7 @@ const ChannelEditPage = () => {
                       }}
                       placeholder="@SyntaxAI или 123456789"
                       className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:ring-2 focus:ring-brand/40 focus:border-brand"
-                      disabled={telegramStatus?.status !== "active"}
+                      disabled={telegramStatusLoading || telegramStatus?.status !== "active"}
                     />
                     <p className="mt-1 text-xs text-slate-400">
                       Укажите username (например @SyntaxAI) или числовой ID чата

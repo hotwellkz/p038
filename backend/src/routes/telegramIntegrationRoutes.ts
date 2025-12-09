@@ -167,21 +167,34 @@ router.post("/disconnect", authRequired, async (req, res) => {
 });
 
 /**
- * GET /api/telegram/status
+ * GET /api/telegram-integration/status
  * Получает статус Telegram интеграции пользователя
  */
 router.get("/status", authRequired, async (req, res) => {
   try {
     const userId = req.user!.uid;
     
+    Logger.info("GET /api/telegram-integration/status: Request received", { userId });
+    
     const status = await getIntegrationStatus(userId);
+    
+    Logger.info("GET /api/telegram-integration/status: Status retrieved", {
+      userId,
+      status: status.status,
+      hasPhoneNumber: !!status.phoneNumber
+    });
     
     return res.json(status);
   } catch (error: any) {
-    Logger.error("Error in /api/telegram-integration/status", error);
+    Logger.error("Error in /api/telegram-integration/status", {
+      error: error?.message || String(error),
+      stack: error?.stack,
+      userId: req.user?.uid
+    });
     
     // Если Firestore недоступен, возвращаем статус "not_connected"
     if (error.message?.includes("Firestore is not available")) {
+      Logger.warn("GET /api/telegram-integration/status: Firestore not available, returning not_connected");
       return res.json({ status: "not_connected" });
     }
     
