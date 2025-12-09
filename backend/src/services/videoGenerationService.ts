@@ -2,6 +2,7 @@ import { sendPromptToSyntax, type TelegramMessageInfo } from "./sendPromptFromUs
 import { scheduleAutoDownload } from "./scheduledTasks";
 import { Logger } from "../utils/logger";
 import { db, isFirestoreAvailable } from "./firebaseAdmin";
+import { getAutoDownloadDelayMinutesForChannel } from "./autoSendScheduler";
 
 export type VideoGenerationSource = "schedule" | "custom_prompt";
 
@@ -203,15 +204,30 @@ export async function runVideoGenerationForChannel(
       channelData.autoDownloadToDriveEnabled === true &&
       channelData.googleDriveFolderId
     ) {
-      const delayMinutes = channelData.autoDownloadDelayMinutes ?? 10;
-      const validDelay = Math.max(1, Math.min(60, delayMinutes));
+      // Вычисляем задержку на основе расписания каналов
+      const promptSentAt = new Date();
+      const delayMinutes = await getAutoDownloadDelayMinutesForChannel(userId, promptSentAt);
+      
+      // Определяем диапазон для логирования
+      const hour = promptSentAt.getHours();
+      let range: string;
+      if (hour >= 0 && hour < 13) {
+        range = "00-13";
+      } else if (hour >= 13 && hour < 17) {
+        range = "13-17";
+      } else {
+        range = "17-24";
+      }
 
       Logger.info("runVideoGenerationForChannel: scheduling auto-download", {
         channelId,
         userId,
         source,
-        delayMinutes: validDelay,
-        googleDriveFolderId: channelData.googleDriveFolderId
+        delayMinutes,
+        range,
+        promptSentAt: promptSentAt.toISOString(),
+        googleDriveFolderId: channelData.googleDriveFolderId,
+        note: "Delay calculated from schedule settings (interval - 1)"
       });
 
       try {
@@ -223,7 +239,7 @@ export async function runVideoGenerationForChannel(
             messageId: messageInfo.messageId,
             chatId: messageInfo.chatId
           },
-          delayMinutes: validDelay,
+          delayMinutes,
           videoTitle: title,
           prompt: prompt.trim()
         });

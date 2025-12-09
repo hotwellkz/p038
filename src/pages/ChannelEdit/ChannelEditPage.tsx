@@ -15,6 +15,8 @@ import PreferencesVariantsEditor from "../../components/PreferencesVariantsEdito
 import { validatePreferences } from "../../utils/preferencesUtils";
 import { testBlottata } from "../../api/blottata";
 import { getTelegramStatus } from "../../api/telegramIntegration";
+import Accordion from "../../components/Accordion";
+import { fetchScheduleSettings, getMinIntervalForTime, type ScheduleSettings } from "../../api/scheduleSettings";
 
 const PLATFORMS: { value: SupportedPlatform; label: string }[] = [
   { value: "YOUTUBE_SHORTS", label: "YouTube Shorts" },
@@ -81,6 +83,7 @@ const ChannelEditPage = () => {
   const [blottataTestResult, setBlottataTestResult] = useState<string | null>(null);
   const [telegramStatus, setTelegramStatus] = useState<{ status: string } | null>(null);
   const [telegramStatusLoading, setTelegramStatusLoading] = useState(true);
+  const [scheduleSettings, setScheduleSettings] = useState<ScheduleSettings | null>(null);
 
   useEffect(() => {
     if (!user?.uid || !channelId) {
@@ -408,167 +411,191 @@ const ChannelEditPage = () => {
               </div>
             )}
 
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-200">
-                Название канала *
-              </label>
-              <input
-                type="text"
-                value={channel.name}
-                onChange={(e) =>
-                  setChannel({ ...channel, name: e.target.value })
+            {/* Основные настройки канала - сворачиваемый блок */}
+            <Accordion
+              title="Основные настройки канала"
+              defaultOpen={!channelId} // Развёрнуто при создании, свёрнуто при редактировании
+              summary={(() => {
+                if (!channel) return "";
+                const parts: string[] = [];
+                const platformLabel = PLATFORMS.find(p => p.value === channel.platform)?.label;
+                const languageLabel = LANGUAGES.find(l => l.value === channel.language)?.label;
+                if (platformLabel) parts.push(platformLabel);
+                if (languageLabel) parts.push(languageLabel);
+                if (channel.tone) parts.push(channel.tone);
+                if (channel.audience) {
+                  // Берём первые слова из описания аудитории
+                  const audiencePreview = channel.audience.split(/\s+/).slice(0, 3).join(" ");
+                  if (audiencePreview) parts.push(audiencePreview);
                 }
-                required
-                className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/40"
-                placeholder="Название канала"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-200">
-                Платформа *
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {PLATFORMS.map((platform) => (
-                  <button
-                    key={platform.value}
-                    type="button"
-                    onClick={() =>
-                      setChannel({ ...channel, platform: platform.value })
+                return parts.join(" • ") || "Настройки не заполнены";
+              })()}
+              className="border-0 bg-transparent"
+            >
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-200">
+                    Название канала *
+                  </label>
+                  <input
+                    type="text"
+                    value={channel.name}
+                    onChange={(e) =>
+                      setChannel({ ...channel, name: e.target.value })
                     }
-                    className={`rounded-xl border px-4 py-3 text-left transition ${
-                      channel.platform === platform.value
-                        ? "border-brand bg-brand/10 text-white"
-                        : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-brand/40"
-                    }`}
-                  >
-                    {platform.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+                    required
+                    className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/40"
+                    placeholder="Название канала"
+                  />
+                </div>
 
-            <div className="grid gap-6 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-200">
-                  Язык *
-                </label>
-                <div className="grid gap-3">
-                  {LANGUAGES.map((lang) => (
-                    <button
-                      key={lang.value}
-                      type="button"
-                      onClick={() =>
-                        setChannel({ ...channel, language: lang.value })
-                      }
-                      className={`rounded-xl border px-4 py-3 text-center transition ${
-                        channel.language === lang.value
-                          ? "border-brand bg-brand/10 text-white"
-                          : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-brand/40"
-                      }`}
-                    >
-                      {lang.label}
-                    </button>
-                  ))}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-200">
+                    Платформа *
+                  </label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {PLATFORMS.map((platform) => (
+                      <button
+                        key={platform.value}
+                        type="button"
+                        onClick={() =>
+                          setChannel({ ...channel, platform: platform.value })
+                        }
+                        className={`rounded-xl border px-4 py-3 text-left transition ${
+                          channel.platform === platform.value
+                            ? "border-brand bg-brand/10 text-white"
+                            : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-brand/40"
+                        }`}
+                      >
+                        {platform.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-200">
+                      Язык *
+                    </label>
+                    <div className="grid gap-3">
+                      {LANGUAGES.map((lang) => (
+                        <button
+                          key={lang.value}
+                          type="button"
+                          onClick={() =>
+                            setChannel({ ...channel, language: lang.value })
+                          }
+                          className={`rounded-xl border px-4 py-3 text-center transition ${
+                            channel.language === lang.value
+                              ? "border-brand bg-brand/10 text-white"
+                              : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-brand/40"
+                          }`}
+                        >
+                          {lang.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-200">
+                      Длительность (сек) *
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {DURATIONS.map((duration) => (
+                        <button
+                          key={duration}
+                          type="button"
+                          onClick={() =>
+                            setChannel({
+                              ...channel,
+                              targetDurationSec: duration
+                            })
+                          }
+                          className={`rounded-xl border px-4 py-3 text-center transition ${
+                            channel.targetDurationSec === duration
+                              ? "border-brand bg-brand/10 text-white"
+                              : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-brand/40"
+                          }`}
+                        >
+                          {duration} сек
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-200">
+                    Ниша / Тематика *
+                  </label>
+                  <input
+                    type="text"
+                    value={channel.niche}
+                    onChange={(e) =>
+                      setChannel({ ...channel, niche: e.target.value })
+                    }
+                    required
+                    className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/40"
+                    placeholder="Например: Технологии, Кулинария, Спорт"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-200">
+                    Целевая аудитория *
+                  </label>
+                  <textarea
+                    value={channel.audience}
+                    onChange={(e) =>
+                      setChannel({ ...channel, audience: e.target.value })
+                    }
+                    required
+                    rows={3}
+                    className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/40"
+                    placeholder="Опишите целевую аудиторию"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-200">
+                    Тон / Стиль *
+                  </label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {TONES.map((tone) => (
+                      <button
+                        key={tone}
+                        type="button"
+                        onClick={() => setChannel({ ...channel, tone })}
+                        className={`rounded-xl border px-4 py-3 text-center transition ${
+                          channel.tone === tone
+                            ? "border-brand bg-brand/10 text-white"
+                            : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-brand/40"
+                        }`}
+                      >
+                        {tone}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-200">
+                    Запрещённые темы
+                  </label>
+                  <textarea
+                    value={channel.blockedTopics}
+                    onChange={(e) =>
+                      setChannel({ ...channel, blockedTopics: e.target.value })
+                    }
+                    rows={3}
+                    className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/40"
+                    placeholder="Темы, которые не должны появляться в сценариях"
+                  />
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-200">
-                  Длительность (сек) *
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {DURATIONS.map((duration) => (
-                    <button
-                      key={duration}
-                      type="button"
-                      onClick={() =>
-                        setChannel({
-                          ...channel,
-                          targetDurationSec: duration
-                        })
-                      }
-                      className={`rounded-xl border px-4 py-3 text-center transition ${
-                        channel.targetDurationSec === duration
-                          ? "border-brand bg-brand/10 text-white"
-                          : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-brand/40"
-                      }`}
-                    >
-                      {duration} сек
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-200">
-                Ниша / Тематика *
-              </label>
-              <input
-                type="text"
-                value={channel.niche}
-                onChange={(e) =>
-                  setChannel({ ...channel, niche: e.target.value })
-                }
-                required
-                className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/40"
-                placeholder="Например: Технологии, Кулинария, Спорт"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-200">
-                Целевая аудитория *
-              </label>
-              <textarea
-                value={channel.audience}
-                onChange={(e) =>
-                  setChannel({ ...channel, audience: e.target.value })
-                }
-                required
-                rows={3}
-                className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/40"
-                placeholder="Опишите целевую аудиторию"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-200">
-                Тон / Стиль *
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {TONES.map((tone) => (
-                  <button
-                    key={tone}
-                    type="button"
-                    onClick={() => setChannel({ ...channel, tone })}
-                    className={`rounded-xl border px-4 py-3 text-center transition ${
-                      channel.tone === tone
-                        ? "border-brand bg-brand/10 text-white"
-                        : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-brand/40"
-                    }`}
-                  >
-                    {tone}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-200">
-                Запрещённые темы
-              </label>
-              <textarea
-                value={channel.blockedTopics}
-                onChange={(e) =>
-                  setChannel({ ...channel, blockedTopics: e.target.value })
-                }
-                rows={3}
-                className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/40"
-                placeholder="Темы, которые не должны появляться в сценариях"
-              />
-            </div>
+            </Accordion>
 
             <div className="space-y-2">
               <PreferencesVariantsEditor
@@ -1173,31 +1200,47 @@ const ChannelEditPage = () => {
 
               {channel.autoDownloadToDriveEnabled && (
                 <div className="space-y-4">
-                  {/* Поле задержки */}
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-200">
-                      Задержка перед скачиванием (минуты)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="60"
-                      value={channel.autoDownloadDelayMinutes ?? 10}
-                      onChange={(e) => {
-                        const value = Math.max(
-                          1,
-                          Math.min(60, parseInt(e.target.value) || 10)
-                        );
-                        setChannel({
-                          ...channel,
-                          autoDownloadDelayMinutes: value
-                        });
-                      }}
-                      className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/40"
-                    />
-                    <p className="mt-2 text-xs text-slate-400">
-                      Время ожидания перед автоматическим скачиванием видео из Telegram. 
-                      По умолчанию: 10 минут. Минимум: 1 минута, максимум: 60 минут.
+                  {/* Информация о задержке (вычисляется автоматически) */}
+                  <div className="rounded-lg border border-white/10 bg-slate-900/40 p-4">
+                    <div className="mb-2 text-sm font-medium text-slate-200">
+                      Задержка перед скачиванием
+                    </div>
+                    <p className="mb-3 text-sm text-slate-300">
+                      Задержка перед скачиванием вычисляется автоматически на основе расписания каналов.
+                      Скачивание запускается примерно за 1 минуту до минимального интервала между публикациями в текущем диапазоне времени суток.
+                    </p>
+                    {scheduleSettings && (
+                      <div className="mt-3 space-y-2 text-xs text-slate-400">
+                        <div className="flex items-center justify-between">
+                          <span>00:00–13:00:</span>
+                          <span className="font-medium text-slate-300">
+                            {(scheduleSettings.minInterval_00_13 ?? scheduleSettings.minIntervalMinutes ?? 11) - 1} мин
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>13:00–17:00:</span>
+                          <span className="font-medium text-slate-300">
+                            {(scheduleSettings.minInterval_13_17 ?? scheduleSettings.minIntervalMinutes ?? 11) - 1} мин
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>17:00–24:00:</span>
+                          <span className="font-medium text-slate-300">
+                            {(scheduleSettings.minInterval_17_24 ?? scheduleSettings.minIntervalMinutes ?? 11) - 1} мин
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    <p className="mt-3 text-xs text-slate-400">
+                      Изменить интервалы можно на странице{" "}
+                      <button
+                        type="button"
+                        onClick={() => navigate("/channels/schedule")}
+                        className="text-brand hover:text-brand/80 underline"
+                      >
+                        "Расписание каналов"
+                      </button>
+                      .
                     </p>
                   </div>
 

@@ -513,11 +513,29 @@ async function markScheduleExecuted(
  * Основная функция планировщика - проверяет все каналы и запускает генерацию промптов
  */
 /**
- * Получает настройки расписания для пользователя
+ * Полные настройки расписания с интервалами
  */
-async function getScheduleSettingsForUser(userId: string): Promise<{ isAutomationPaused: boolean } | null> {
+interface FullScheduleSettings {
+  minInterval_00_13?: number;
+  minInterval_13_17?: number;
+  minInterval_17_24?: number;
+  minIntervalMinutes?: number; // для обратной совместимости
+  isAutomationPaused: boolean;
+}
+
+const DEFAULT_INTERVALS = {
+  minInterval_00_13: 11,
+  minInterval_13_17: 11,
+  minInterval_17_24: 11,
+  minIntervalMinutes: 11
+};
+
+/**
+ * Получает полные настройки расписания для пользователя (включая интервалы)
+ */
+async function getFullScheduleSettingsForUser(userId: string): Promise<FullScheduleSettings | null> {
   if (!isFirestoreAvailable() || !db) {
-    Logger.warn("Firestore is not available, cannot check automation pause status", { userId });
+    Logger.warn("Firestore is not available, cannot get schedule settings", { userId });
     return null;
   }
 
@@ -531,12 +549,29 @@ async function getScheduleSettingsForUser(userId: string): Promise<{ isAutomatio
     const settingsSnap = await settingsRef.get();
     
     if (!settingsSnap.exists) {
-      // Настройки не найдены, возвращаем дефолтные (пауза выключена)
-      return { isAutomationPaused: false };
+      // Настройки не найдены, возвращаем дефолтные
+      return {
+        ...DEFAULT_INTERVALS,
+        isAutomationPaused: false
+      };
     }
 
     const data = settingsSnap.data();
+    const oldInterval = typeof data?.minIntervalMinutes === "number" 
+      ? data.minIntervalMinutes 
+      : DEFAULT_INTERVALS.minIntervalMinutes;
+
     return {
+      minInterval_00_13: typeof data?.minInterval_00_13 === "number"
+        ? data.minInterval_00_13
+        : oldInterval,
+      minInterval_13_17: typeof data?.minInterval_13_17 === "number"
+        ? data.minInterval_13_17
+        : oldInterval,
+      minInterval_17_24: typeof data?.minInterval_17_24 === "number"
+        ? data.minInterval_17_24
+        : oldInterval,
+      minIntervalMinutes: oldInterval,
       isAutomationPaused: typeof data?.isAutomationPaused === "boolean" 
         ? data.isAutomationPaused 
         : false
@@ -548,6 +583,69 @@ async function getScheduleSettingsForUser(userId: string): Promise<{ isAutomatio
     });
     return null;
   }
+}
+
+/**
+ * Получает настройки расписания для пользователя (только пауза, для обратной совместимости)
+ */
+async function getScheduleSettingsForUser(userId: string): Promise<{ isAutomationPaused: boolean } | null> {
+  const fullSettings = await getFullScheduleSettingsForUser(userId);
+  if (!fullSettings) return null;
+  return { isAutomationPaused: fullSettings.isAutomationPaused };
+}
+
+/**
+ * Вычисляет задержку автоскачивания на основе расписания каналов
+ * @param userId - ID пользователя
+ * @param sentAt - Время отправки промпта
+ * @returns Задержка в минутах (interval - 1, с границами 1-60)
+ */
+export async function getAutoDownloadDelayMinutesForChannel(
+  userId: string,
+  sentAt: Date
+): Promise<number> {
+  const scheduleSettings = await getFullScheduleSettingsForUser(userId);
+  
+  if (!scheduleSettings) {
+    // Если не удалось получить настройки, используем дефолтное значение
+    Logger.warn("getAutoDownloadDelayMinutesForChannel: schedule settings not available, using default", {
+      userId,
+      defaultDelay: 10
+    });
+    return 10;
+  }
+
+  // Определяем диапазон времени суток
+  const hour = sentAt.getHours();
+  let baseInterval: number;
+  let range: string;
+
+  if (hour >= 0 && hour < 13) {
+    baseInterval = scheduleSettings.minInterval_00_13 ?? scheduleSettings.minIntervalMinutes ?? DEFAULT_INTERVALS.minInterval_00_13;
+    range = "00-13";
+  } else if (hour >= 13 && hour < 17) {
+    baseInterval = scheduleSettings.minInterval_13_17 ?? scheduleSettings.minIntervalMinutes ?? DEFAULT_INTERVALS.minInterval_13_17;
+    range = "13-17";
+  } else {
+    baseInterval = scheduleSettings.minInterval_17_24 ?? scheduleSettings.minIntervalMinutes ?? DEFAULT_INTERVALS.minInterval_17_24;
+    range = "17-24";
+  }
+
+  // Вычисляем задержку как interval - 1, с безопасными границами
+  let delay = baseInterval - 1;
+  if (delay < 1) delay = 1;
+  if (delay > 60) delay = 60;
+
+  Logger.info("getAutoDownloadDelayMinutesForChannel: calculated delay", {
+    userId,
+    sentAt: sentAt.toISOString(),
+    hour,
+    range,
+    baseInterval,
+    calculatedDelay: delay
+  });
+
+  return delay;
 }
 
 export async function processAutoSendTick(): Promise<void> {
@@ -733,29 +831,48 @@ export async function processAutoSendTick(): Promise<void> {
               });
 
               if (hasAutoDownloadEnabled && hasGoogleDriveFolder) {
-                const delayMinutes = channel.autoDownloadDelayMinutes ?? 10;
+                // Вычисляем задержку на основе расписания каналов
+                const promptSentAt = new Date();
+                const delayMinutes = await getAutoDownloadDelayMinutesForChannel(
+                  channel.ownerId,
+                  promptSentAt
+                );
                 
-                // Валидация задержки
-                const validDelay = Math.max(1, Math.min(60, delayMinutes));
+                // Определяем диапазон для логирования
+                const hour = promptSentAt.getHours();
+                let range: string;
+                if (hour >= 0 && hour < 13) {
+                  range = "00-13";
+                } else if (hour >= 13 && hour < 17) {
+                  range = "13-17";
+                } else {
+                  range = "17-24";
+                }
                 
                 Logger.info("processAutoSendTick: scheduling auto-download", {
                   channelId: channel.id,
                   scheduleId: schedule.id,
                   messageId: promptResult.messageId,
                   chatId: promptResult.chatId,
-                  delayMinutes: validDelay,
+                  delayMinutes,
+                  range,
+                  promptSentAt: promptSentAt.toISOString(),
                   googleDriveFolderId: channel.googleDriveFolderId,
                   videoTitle: promptResult.title || "not provided",
-                  promptLength: promptResult.prompt?.length || 0
+                  promptLength: promptResult.prompt?.length || 0,
+                  note: "Delay calculated from schedule settings (interval - 1)"
                 });
 
                 try {
-                  console.log("SCHEDULING_AUTO_DOWNLOAD:", {
+                  console.log("auto-download scheduled", {
+                    userId: channel.ownerId,
                     channelId: channel.id,
                     scheduleId: schedule.id,
                     messageId: promptResult.messageId,
-                    delayMinutes: validDelay,
-                    willRunAt: new Date(Date.now() + validDelay * 60 * 1000).toISOString()
+                    promptSentAt: promptSentAt.toISOString(),
+                    delayMinutes,
+                    range,
+                    willRunAt: new Date(Date.now() + delayMinutes * 60 * 1000).toISOString()
                   });
 
                   const taskId = scheduleAutoDownload({
@@ -766,7 +883,7 @@ export async function processAutoSendTick(): Promise<void> {
                       messageId: promptResult.messageId,
                       chatId: promptResult.chatId
                     },
-                    delayMinutes: validDelay,
+                    delayMinutes,
                     videoTitle: promptResult.title,
                     prompt: promptResult.prompt
                   });

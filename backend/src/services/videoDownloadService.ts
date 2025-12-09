@@ -54,7 +54,10 @@ export async function downloadAndUploadVideoToDrive(
     callStack: new Error().stack?.split("\n").slice(1, 4).join(" | ")
   });
 
-  Logger.info("downloadAndUploadVideoToDrive: start", {
+  // ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ДЛЯ СРАВНЕНИЯ РУЧНОГО И АВТОМАТИЧЕСКОГО РЕЖИМА
+  const mode = scheduleId ? "auto" : "manual";
+  Logger.info(`downloadAndUploadVideoToDrive ${mode}: start`, {
+    mode,
     channelId,
     userId,
     telegramMessageId,
@@ -62,6 +65,15 @@ export async function downloadAndUploadVideoToDrive(
     scheduleId: scheduleId || "manual",
     timestamp: new Date().toISOString(),
     callStack: new Error().stack?.split("\n").slice(1, 4).join(" | ")
+  });
+
+  console.log(`DOWNLOAD_AND_UPLOAD_${mode.toUpperCase()}_START:`, {
+    mode,
+    channelId,
+    userId,
+    telegramMessageId,
+    scheduleId: scheduleId || "manual",
+    timestamp: new Date().toISOString()
   });
 
   if (!SYNX_CHAT_ID) {
@@ -108,9 +120,32 @@ export async function downloadAndUploadVideoToDrive(
       telegramSyntaxPeer?: string | null;
     };
     
+    // ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ПАРАМЕТРОВ КАНАЛА
+    Logger.info(`downloadAndUploadVideoToDrive ${mode}: channel data loaded`, {
+      mode,
+      channelId,
+      userId,
+      channelName: channelData.name || "not set",
+      googleDriveFolderId: channelData.googleDriveFolderId || "NOT SET",
+      googleDriveFolderIdType: typeof channelData.googleDriveFolderId,
+      uploadNotificationEnabled: channelData.uploadNotificationEnabled,
+      uploadNotificationChatId: channelData.uploadNotificationChatId || "not set",
+      generationTransport: channelData.generationTransport || "telegram_global",
+      telegramSyntaxPeer: channelData.telegramSyntaxPeer || "not set"
+    });
+
+    console.log(`CHANNEL_DATA_${mode.toUpperCase()}:`, {
+      mode,
+      channelId,
+      googleDriveFolderId: channelData.googleDriveFolderId || "NOT_SET",
+      hasGoogleDriveFolderId: !!channelData.googleDriveFolderId,
+      generationTransport: channelData.generationTransport || "telegram_global"
+    });
+    
     // Определяем тип Telegram-клиента на основе настроек канала
     const transport = channelData.generationTransport || "telegram_global";
-    Logger.info("downloadAndUploadVideoToDrive: определяем тип Telegram-клиента", {
+    Logger.info(`downloadAndUploadVideoToDrive ${mode}: определяем тип Telegram-клиента`, {
+      mode,
       channelId,
       userId,
       transport,
@@ -233,18 +268,39 @@ export async function downloadAndUploadVideoToDrive(
 
     const finalFolderId = folderIdFromChannel || defaultFolderId;
 
-    if (!finalFolderId) {
-      return {
-        success: false,
-        error: "Не указана папка для загрузки. Укажите googleDriveFolderId в настройках канала или задайте GOOGLE_DRIVE_DEFAULT_PARENT в backend/.env"
-      };
-    }
-
-    Logger.info("Determining Google Drive folder", {
+    // ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ОПРЕДЕЛЕНИЯ ПАПКИ
+    Logger.info(`downloadAndUploadVideoToDrive ${mode}: determining Google Drive folder`, {
+      mode,
+      channelId,
+      userId,
       folderIdFromChannel: folderIdFromChannel || "not set",
       defaultFolderId: defaultFolderId || "not set",
-      finalFolderId
+      finalFolderId: finalFolderId || "NOT SET",
+      willProceed: !!finalFolderId
     });
+
+    console.log(`FOLDER_ID_${mode.toUpperCase()}:`, {
+      mode,
+      channelId,
+      folderIdFromChannel: folderIdFromChannel || "NOT_SET",
+      defaultFolderId: defaultFolderId || "NOT_SET",
+      finalFolderId: finalFolderId || "NOT_SET",
+      willProceed: !!finalFolderId
+    });
+
+    if (!finalFolderId) {
+      const errorMsg = "Не указана папка для загрузки. Укажите googleDriveFolderId в настройках канала или задайте GOOGLE_DRIVE_DEFAULT_PARENT в backend/.env";
+      Logger.error(`downloadAndUploadVideoToDrive ${mode}: folder not specified`, {
+        mode,
+        channelId,
+        userId,
+        error: errorMsg
+      });
+      return {
+        success: false,
+        error: errorMsg
+      };
+    }
 
     // Создаём Telegram-клиент в зависимости от настроек канала
     if (transport === "telegram_user") {
@@ -459,7 +515,17 @@ export async function downloadAndUploadVideoToDrive(
 
       tempFilePath = downloadResult.tempPath;
 
-      Logger.info("downloadAndUploadVideoToDrive: video downloaded successfully", {
+      Logger.info(`downloadAndUploadVideoToDrive ${mode}: video downloaded successfully`, {
+        mode,
+        channelId,
+        userId,
+        tempPath: tempFilePath,
+        fileName: downloadResult.fileName,
+        messageId: downloadResult.messageId
+      });
+
+      console.log(`VIDEO_DOWNLOADED_${mode.toUpperCase()}:`, {
+        mode,
         channelId,
         tempPath: tempFilePath,
         fileName: downloadResult.fileName,
@@ -489,13 +555,25 @@ export async function downloadAndUploadVideoToDrive(
       });
 
       // Определяем, какую интеграцию использовать: новую (googleDriveIntegrations) или старую (userOAuthTokens)
-      Logger.info("downloadAndUploadVideoToDrive: starting Google Drive upload", {
+      Logger.info(`downloadAndUploadVideoToDrive ${mode}: starting Google Drive upload`, {
+        mode,
         channelId,
         userId,
         fileName: driveFileName,
         folderId: finalFolderId,
         filePath: tempFilePath,
-        scheduleId: scheduleId || "manual"
+        scheduleId: scheduleId || "manual",
+        timestamp: new Date().toISOString()
+      });
+
+      console.log(`UPLOAD_START_${mode.toUpperCase()}:`, {
+        mode,
+        channelId,
+        userId,
+        fileName: driveFileName,
+        folderId: finalFolderId,
+        filePath: tempFilePath,
+        timestamp: new Date().toISOString()
       });
 
       console.log("UPLOAD_START:", {
@@ -722,7 +800,8 @@ export async function downloadAndUploadVideoToDrive(
           throw new Error("GOOGLE_DRIVE_UPLOAD_FAILED: Не удалось загрузить файл в Google Drive. Все методы загрузки не сработали.");
         }
         
-        Logger.info("downloadAndUploadVideoToDrive: File uploaded to Google Drive successfully", {
+        Logger.info(`downloadAndUploadVideoToDrive ${mode}: File uploaded to Google Drive successfully`, {
+          mode,
           channelId,
           userId,
           telegramMessageId,
@@ -732,6 +811,17 @@ export async function downloadAndUploadVideoToDrive(
           folderId: finalFolderId,
           scheduleId: scheduleId || "manual",
           uploadedAt: new Date().toISOString()
+        });
+
+        console.log(`UPLOAD_SUCCESS_${mode.toUpperCase()}:`, {
+          mode,
+          channelId,
+          userId,
+          driveFileId: driveResult.fileId,
+          webViewLink: driveResult.webViewLink,
+          fileName: driveFileName,
+          folderId: finalFolderId,
+          timestamp: new Date().toISOString()
         });
 
         // Уведомления в Telegram (если включены)
@@ -971,13 +1061,26 @@ export async function downloadAndUploadVideoToDrive(
         const folderId = uploadError?.folderId || finalFolderId;
         const userEmail = uploadError?.userEmail;
         
-        Logger.error("downloadAndUploadVideoToDrive: upload error in catch block", {
+        Logger.error(`downloadAndUploadVideoToDrive ${mode}: upload error in catch block`, {
+          mode,
+          channelId,
           userId,
           error: errorMessage,
           errorType,
           folderId,
           userEmail,
-          errorCode: uploadError?.code
+          errorCode: uploadError?.code,
+          scheduleId: scheduleId || "manual"
+        });
+
+        console.error(`UPLOAD_ERROR_${mode.toUpperCase()}:`, {
+          mode,
+          channelId,
+          userId,
+          error: errorMessage,
+          errorType,
+          folderId,
+          timestamp: new Date().toISOString()
         });
         
         // Проверяем, является ли это ошибкой отсутствия интеграции
@@ -1017,13 +1120,23 @@ export async function downloadAndUploadVideoToDrive(
       const errorMessage = String(err?.message ?? err);
       const errorStack = err?.stack;
 
-      Logger.error("Error in downloadAndUploadVideoToDrive", {
+      Logger.error(`Error in downloadAndUploadVideoToDrive ${mode}`, {
+        mode,
         error: errorMessage,
         stack: errorStack,
         userId,
         channelId,
         tempFilePath,
-        scheduleId
+        scheduleId: scheduleId || "manual"
+      });
+
+      console.error(`ERROR_${mode.toUpperCase()}:`, {
+        mode,
+        channelId,
+        userId,
+        error: errorMessage,
+        scheduleId: scheduleId || "manual",
+        timestamp: new Date().toISOString()
       });
 
       // Создаём уведомление об общей ошибке автоматизации (если ещё не создано)
