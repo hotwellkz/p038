@@ -23,25 +23,65 @@ export default function BlotatoSetupPage() {
   const [tiktokId, setTiktokId] = useState("");
   const [instagramId, setInstagramId] = useState("");
   const [youtubeId, setYoutubeId] = useState("");
+  const [facebookId, setFacebookId] = useState("");
+  const [facebookPageId, setFacebookPageId] = useState("");
+  const [threadsId, setThreadsId] = useState("");
+  const [twitterId, setTwitterId] = useState("");
+  const [linkedinId, setLinkedinId] = useState("");
+  const [pinterestId, setPinterestId] = useState("");
+  const [pinterestBoardId, setPinterestBoardId] = useState("");
+  const [blueskyId, setBlueskyId] = useState("");
   const [savingPlatforms, setSavingPlatforms] = useState(false);
 
   // Состояния для аккордеона
   const [expandedPlatform, setExpandedPlatform] = useState<string | null>(null);
 
   useEffect(() => {
-    // Проверяем, есть ли уже сохранённый API-ключ
-    const checkApiKey = async () => {
+    // Загружаем данные канала и настройки пользователя
+    const loadData = async () => {
+      if (!channelId || !user?.uid) {
+        return;
+      }
+
       try {
+        // Загружаем каналы
+        await fetchChannels(user.uid);
+        const { channels } = useChannelStore.getState();
+        const channel = channels.find((c) => c.id === channelId);
+        
+        if (channel) {
+          // Загружаем существующие ID платформ из канала
+          if (channel.blotataTiktokId) setTiktokId(channel.blotataTiktokId);
+          if (channel.blotataInstagramId) setInstagramId(channel.blotataInstagramId);
+          if (channel.blotataYoutubeId) setYoutubeId(channel.blotataYoutubeId);
+          if (channel.blotataFacebookId) setFacebookId(channel.blotataFacebookId);
+          if (channel.blotataFacebookPageId) setFacebookPageId(channel.blotataFacebookPageId);
+          if (channel.blotataThreadsId) setThreadsId(channel.blotataThreadsId);
+          if (channel.blotataTwitterId) setTwitterId(channel.blotataTwitterId);
+          if (channel.blotataLinkedinId) setLinkedinId(channel.blotataLinkedinId);
+          if (channel.blotataPinterestId) setPinterestId(channel.blotataPinterestId);
+          if (channel.blotataPinterestBoardId) setPinterestBoardId(channel.blotataPinterestBoardId);
+          if (channel.blotataBlueskyId) setBlueskyId(channel.blotataBlueskyId);
+          
+          // Если в канале уже есть API-ключ, считаем его сохранённым
+          if (channel.blotataApiKey) {
+            setApiKeySaved(true);
+          }
+        }
+
+        // Проверяем настройки пользователя для подстановки API-ключа по умолчанию
         const settings = await getUserSettings();
-        if (settings.hasDefaultBlottataApiKey) {
-          setApiKeySaved(true);
+        if (settings.hasDefaultBlottataApiKey && !channel?.blotataApiKey) {
+          // Если в канале нет ключа, но есть в настройках, можно показать подсказку
+          // Но не заполняем автоматически, чтобы пользователь явно ввёл его
         }
       } catch (error) {
-        console.error("Failed to load user settings", error);
+        console.error("Failed to load channel data or user settings", error);
       }
     };
-    void checkApiKey();
-  }, []);
+    void loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelId, user?.uid]);
 
   const handleSaveApiKey = async () => {
     const trimmedKey = apiKey.trim();
@@ -50,14 +90,33 @@ export default function BlotatoSetupPage() {
       return;
     }
 
+    if (!channelId || !user?.uid) {
+      showError("ID канала или пользователя не найден", 3000);
+      return;
+    }
+
     setSavingApiKey(true);
     try {
+      // Сохраняем ключ в профиль пользователя (как ключ по умолчанию)
       await updateUserSettings({
         defaultBlottataApiKey: trimmedKey
       });
+      
+      // Сохраняем ключ в канал
+      await fetchChannels(user.uid);
+      const { channels } = useChannelStore.getState();
+      const channel = channels.find((c) => c.id === channelId);
+      
+      if (channel) {
+        await updateChannel(user.uid, {
+          ...channel,
+          blotataApiKey: trimmedKey
+        });
+      }
+      
       setApiKeySaved(true);
       setApiKey("");
-      showSuccess("API-ключ Blotato успешно сохранён", 3000);
+      showSuccess("API-ключ Blotato успешно сохранён в профиль и канал", 3000);
     } catch (error: any) {
       showError(error.message || "Не удалось сохранить API-ключ", 5000);
     } finally {
@@ -82,12 +141,20 @@ export default function BlotatoSetupPage() {
         throw new Error("Канал не найден");
       }
 
-      // Обновляем только поля ID платформ
+      // Обновляем все поля ID платформ
       await updateChannel(user.uid, {
         ...channel,
         blotataTiktokId: tiktokId.trim() || null,
         blotataInstagramId: instagramId.trim() || null,
-        blotataYoutubeId: youtubeId.trim() || null
+        blotataYoutubeId: youtubeId.trim() || null,
+        blotataFacebookId: facebookId.trim() || null,
+        blotataFacebookPageId: facebookPageId.trim() || null,
+        blotataThreadsId: threadsId.trim() || null,
+        blotataTwitterId: twitterId.trim() || null,
+        blotataLinkedinId: linkedinId.trim() || null,
+        blotataPinterestId: pinterestId.trim() || null,
+        blotataPinterestBoardId: pinterestBoardId.trim() || null,
+        blotataBlueskyId: blueskyId.trim() || null
       });
       showSuccess("ID платформ успешно сохранены в настройках канала", 3000);
     } catch (error: any) {
@@ -96,8 +163,78 @@ export default function BlotatoSetupPage() {
       setSavingPlatforms(false);
     }
   };
+  
+  // Функция для сохранения всех данных (API-ключ + ID платформ) перед переходом
+  const handleSaveAllData = async (): Promise<boolean> => {
+    if (!channelId || !user?.uid) {
+      showError("ID канала или пользователя не найден", 3000);
+      return false;
+    }
 
-  const handleComplete = () => {
+    setSavingApiKey(true);
+    setSavingPlatforms(true);
+    
+    try {
+      // Загружаем каналы, чтобы получить актуальный канал
+      await fetchChannels(user.uid);
+      const { channels } = useChannelStore.getState();
+      const channel = channels.find((c) => c.id === channelId);
+      
+      if (!channel) {
+        throw new Error("Канал не найден");
+      }
+
+      // Определяем финальный API-ключ: используем введённый, если он есть, иначе оставляем существующий
+      let finalApiKey = channel.blotataApiKey;
+      
+      // Если пользователь ввёл новый API-ключ, сохраняем его
+      if (apiKey.trim()) {
+        const trimmedKey = apiKey.trim();
+        // Сохраняем в профиль (как ключ по умолчанию)
+        await updateUserSettings({
+          defaultBlottataApiKey: trimmedKey
+        });
+        finalApiKey = trimmedKey;
+      } else if (apiKeySaved && channel.blotataApiKey) {
+        // Если ключ уже был сохранён ранее, используем его из канала
+        finalApiKey = channel.blotataApiKey;
+      }
+
+      // Сохраняем все данные в канал одним запросом
+      await updateChannel(user.uid, {
+        ...channel,
+        blotataApiKey: finalApiKey,
+        blotataTiktokId: tiktokId.trim() || null,
+        blotataInstagramId: instagramId.trim() || null,
+        blotataYoutubeId: youtubeId.trim() || null,
+        blotataFacebookId: facebookId.trim() || null,
+        blotataFacebookPageId: facebookPageId.trim() || null,
+        blotataThreadsId: threadsId.trim() || null,
+        blotataTwitterId: twitterId.trim() || null,
+        blotataLinkedinId: linkedinId.trim() || null,
+        blotataPinterestId: pinterestId.trim() || null,
+        blotataPinterestBoardId: pinterestBoardId.trim() || null,
+        blotataBlueskyId: blueskyId.trim() || null
+      });
+
+      showSuccess("Все данные успешно сохранены в настройках канала", 3000);
+      return true;
+    } catch (error: any) {
+      showError(error.message || "Не удалось сохранить данные", 5000);
+      return false;
+    } finally {
+      setSavingApiKey(false);
+      setSavingPlatforms(false);
+    }
+  };
+
+  const handleComplete = async () => {
+    // Сохраняем все данные перед переходом
+    const saved = await handleSaveAllData();
+    if (!saved) {
+      return; // Если сохранение не удалось, остаёмся на странице
+    }
+
     if (channelId) {
       navigate(`/channels/${channelId}/edit`, { replace: true });
     } else {
@@ -105,7 +242,22 @@ export default function BlotatoSetupPage() {
     }
   };
 
-  const canComplete = apiKeySaved && (tiktokId.trim() || instagramId.trim() || youtubeId.trim());
+  const handleSkip = () => {
+    // Пропускаем настройку, переходим к редактированию канала
+    if (channelId) {
+      navigate(`/channels/${channelId}/edit`, { replace: true });
+    } else {
+      navigate("/channels", { replace: true });
+    }
+  };
+
+  // Проверяем, есть ли хотя бы API-ключ и один ID платформы
+  const hasApiKey = apiKeySaved || apiKey.trim() !== "";
+  const hasPlatformId = tiktokId.trim() || instagramId.trim() || youtubeId.trim() || 
+                        facebookId.trim() || facebookPageId.trim() || threadsId.trim() || 
+                        twitterId.trim() || linkedinId.trim() || pinterestId.trim() || 
+                        pinterestBoardId.trim() || blueskyId.trim();
+  const canComplete = hasApiKey && hasPlatformId;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 p-4 md:p-8">
@@ -513,14 +665,23 @@ export default function BlotatoSetupPage() {
           <div className="flex flex-col gap-3 md:flex-row md:justify-center">
             <button
               onClick={handleComplete}
-              disabled={!canComplete}
+              disabled={!canComplete || savingApiKey || savingPlatforms}
               className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand to-purple-600 px-8 py-3 font-semibold text-white transition hover:from-brand/90 hover:to-purple-600/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <CheckCircle2 className="h-5 w-5" />
-              <span>Готово, перейти к каналу</span>
+              {savingApiKey || savingPlatforms ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>Сохранение...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-5 w-5" />
+                  <span>Готово, перейти к каналу</span>
+                </>
+              )}
             </button>
             <button
-              onClick={handleComplete}
+              onClick={handleSkip}
               className="rounded-xl border border-white/20 bg-transparent px-8 py-3 font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
             >
               Пропустить, настрою позже

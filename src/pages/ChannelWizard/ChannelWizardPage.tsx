@@ -1,4 +1,5 @@
-import { useState, FormEvent, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check, Loader2, Sparkles, FileText, Video, Zap } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
@@ -107,7 +108,6 @@ const ChannelWizardPage = () => {
   const [error, setError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [telegramStatus, setTelegramStatus] = useState<{ status: string } | null>(null);
-  const [telegramStatusLoading, setTelegramStatusLoading] = useState(true);
   const [createdChannelId, setCreatedChannelId] = useState<string | null>(null);
   const [wizardDriveFolders, setWizardDriveFolders] = useState<{
     rootFolderId: string;
@@ -173,12 +173,10 @@ const ChannelWizardPage = () => {
   useEffect(() => {
     const loadTelegramStatus = async () => {
       if (!user?.uid) {
-        setTelegramStatusLoading(false);
         return;
       }
       
       try {
-        setTelegramStatusLoading(true);
         const status = await getTelegramStatus();
         setTelegramStatus(status);
         
@@ -195,8 +193,6 @@ const ChannelWizardPage = () => {
           ...prev,
           generationTransport: prev.generationTransport || "telegram_global" as any
         }));
-      } finally {
-        setTelegramStatusLoading(false);
       }
     };
 
@@ -344,8 +340,10 @@ const ChannelWizardPage = () => {
       try {
         // Получаем настройки пользователя для подстановки defaultBlottataApiKey
         let defaultBlottataApiKey: string | undefined = undefined;
+        let hasDefaultBlotatoApiKey = false;
         try {
           const userSettings = await getUserSettings();
+          hasDefaultBlotatoApiKey = userSettings.hasDefaultBlottataApiKey || false;
           if (userSettings.hasDefaultBlottataApiKey && userSettings.defaultBlottataApiKey) {
             defaultBlottataApiKey = userSettings.defaultBlottataApiKey === "****" 
               ? undefined 
@@ -355,16 +353,29 @@ const ChannelWizardPage = () => {
           console.warn("Failed to load user settings for default Blotato API key", settingsError);
         }
 
+        // Создаём канал с включённым Blotato и заполненными полями папок
         const channelData: ChannelCreatePayload = {
           ...formData,
           generationTransport: formData.generationTransport || (telegramStatus?.status === "active" ? "telegram_user" : "telegram_global"),
-          blotataApiKey: formData.blotataApiKey || defaultBlottataApiKey,
-          googleDriveFolderId: rootFolderId,
+          // Включаем Blotato-публикацию для нового канала
+          blotataEnabled: true,
+          // Заполняем ID папок из созданных папок
           driveInputFolderId: rootFolderId,
-          driveArchiveFolderId: archiveFolderId
+          driveArchiveFolderId: archiveFolderId,
+          // Подставляем API-ключ из настроек пользователя, если он есть
+          blotataApiKey: defaultBlottataApiKey,
+          googleDriveFolderId: rootFolderId
         };
+        
         const newChannel = await createChannel(user.uid, channelData);
-        navigate(`/channels/${newChannel.id}/edit`, { replace: true });
+        
+        // Если у пользователя нет сохранённого Blotato API-ключа, перенаправляем на страницу настройки
+        if (!hasDefaultBlotatoApiKey || !defaultBlottataApiKey) {
+          navigate(`/channels/${newChannel.id}/blotato-setup`, { replace: true });
+        } else {
+          // Если ключ есть, переходим к редактированию канала
+          navigate(`/channels/${newChannel.id}/edit`, { replace: true });
+        }
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Ошибка при создании канала"
@@ -425,7 +436,7 @@ const ChannelWizardPage = () => {
         niche: formData.niche,
         videoDuration: formData.targetDurationSec,
         tone: formData.tone,
-        additionalNotes: formData.additionalPreferences
+        additionalNotes: formData.extraNotes
       });
 
       if (result.success && result.targetAudience) {
@@ -459,7 +470,7 @@ const ChannelWizardPage = () => {
         niche: formData.niche,
         targetAudience: formData.audience,
         tone: formData.tone,
-        additionalNotes: formData.additionalPreferences
+        additionalNotes: formData.extraNotes
       });
 
       if (result.success && result.forbiddenTopics) {

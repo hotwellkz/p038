@@ -119,6 +119,11 @@ export const channelRepository: ChannelRepository = {
       autoDownloadDelayMinutes: data.autoDownloadDelayMinutes ?? 10,
       uploadNotificationEnabled: data.uploadNotificationEnabled ?? false,
       uploadNotificationChatId: data.uploadNotificationChatId ?? null,
+      // Для новых каналов: Blotato-публикация включена по умолчанию, если не указано явно
+      blotataEnabled: data.blotataEnabled !== undefined ? data.blotataEnabled : true,
+      driveInputFolderId: data.driveInputFolderId,
+      driveArchiveFolderId: data.driveArchiveFolderId,
+      blotataApiKey: data.blotataApiKey,
       orderIndex,
       createdAt: serverTimestamp() as any,
       updatedAt: serverTimestamp() as any,

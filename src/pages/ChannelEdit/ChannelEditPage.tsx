@@ -25,6 +25,8 @@ import { IntegrationsStatusBlock } from "../../components/IntegrationsStatusBloc
 import { useIntegrationsStatus } from "../../hooks/useIntegrationsStatus";
 import { GenerateDriveFoldersButton } from "../../components/GenerateDriveFoldersButton";
 import { getUserSettings } from "../../api/userSettings";
+import { getBlotatoPublishStatus, type BlotatoPublishSettings } from "../../utils/blotatoStatus";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 
 const PLATFORMS: { value: SupportedPlatform; label: string }[] = [
   { value: "YOUTUBE_SHORTS", label: "YouTube Shorts" },
@@ -1966,10 +1968,72 @@ const ChannelEditPage = () => {
             </div>
 
             {/* Блок автоматической публикации через Blotato */}
-            <div className="border-t border-white/10 pt-6">
-              <h3 className="mb-4 text-lg font-semibold text-white">
-                Автоматическая публикация через Blotato
-              </h3>
+            {(() => {
+              const blotatoSettings: BlotatoPublishSettings = {
+                enabled: channel.blotataEnabled || false,
+                inputFolderId: channel.driveInputFolderId,
+                archiveFolderId: channel.driveArchiveFolderId,
+                blotatoApiKey: channel.blotataApiKey,
+                youtubeId: channel.blotataYoutubeId,
+                tiktokId: channel.blotataTiktokId,
+                instagramId: channel.blotataInstagramId,
+                facebookId: channel.blotataFacebookId,
+                threadsId: channel.blotataThreadsId,
+                pinterestId: channel.blotataPinterestId,
+                blueskyId: channel.blotataBlueskyId
+              };
+              
+              const status = getBlotatoPublishStatus(blotatoSettings);
+              const hasError = status.status === 'needs_setup' && blotatoSettings.enabled;
+              
+              return (
+                <Accordion
+                  title="Автоматическая публикация через Blotato"
+                  defaultOpen={false}
+                  summary={
+                    <div className="flex flex-wrap items-center gap-2">
+                      {status.status === 'ok' && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-300">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Готово
+                        </span>
+                      )}
+                      {status.status === 'needs_setup' && blotatoSettings.enabled && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/20 px-2.5 py-1 text-xs font-medium text-red-300">
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          Требуется настройка
+                        </span>
+                      )}
+                      {!blotatoSettings.enabled && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-500/20 px-2.5 py-1 text-xs font-medium text-slate-400">
+                          Выключено
+                        </span>
+                      )}
+                    </div>
+                  }
+                  className={`border-t border-white/10 pt-6 ${hasError ? 'border-red-500/50 bg-red-500/5' : ''}`}
+                >
+              {/* Статус внутри блока */}
+              {channel.blotataEnabled && (
+                <div className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
+                  status.status === 'ok'
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                    : 'border-red-500/30 bg-red-500/10 text-red-200'
+                }`}>
+                  {status.status === 'ok' ? (
+                    <span className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" />
+                      {status.message}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" />
+                      {status.message}
+                    </span>
+                  )}
+                </div>
+              )}
+              
               <p className="mb-4 text-sm text-slate-400">
                 Настройте автоматическую публикацию видео в социальные сети через Blotato API. 
                 Файлы из указанной входной папки Google Drive будут автоматически публиковаться на выбранные платформы.
@@ -2001,7 +2065,11 @@ const ChannelEditPage = () => {
                 <div className="space-y-4">
                   {/* ID входной папки Google Drive */}
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                    <label className={`flex items-center gap-2 text-sm font-medium ${
+                      status.status === 'needs_setup' && status.missing.includes('ID входной папки Google Drive')
+                        ? 'text-red-300'
+                        : 'text-slate-200'
+                    }`}>
                       <span>ID входной папки Google Drive *</span>
                       <FieldHelpIcon
                         fieldKey="channel.driveInputFolderId"
@@ -2026,7 +2094,11 @@ const ChannelEditPage = () => {
                         })
                       }
                       placeholder="Например: 1F1NzA7Z5XIVzVt4s4Zo1kZRVt-SXO000"
-                      className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/40"
+                      className={`w-full rounded-xl border bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:ring-2 ${
+                        status.status === 'needs_setup' && status.missing.includes('ID входной папки Google Drive')
+                          ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/40'
+                          : 'border-white/10 focus:border-brand focus:ring-brand/40'
+                      }`}
                     />
                     <p className="text-xs text-slate-400">
                       Папка, где появляются готовые видео для этого канала. Система будет отслеживать новые файлы в этой папке.
@@ -2035,7 +2107,11 @@ const ChannelEditPage = () => {
 
                   {/* ID папки архива Google Drive */}
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                    <label className={`flex items-center gap-2 text-sm font-medium ${
+                      status.status === 'needs_setup' && status.missing.includes('ID папки архива Google Drive')
+                        ? 'text-red-300'
+                        : 'text-slate-200'
+                    }`}>
                       <span>ID папки архива Google Drive *</span>
                       <FieldHelpIcon
                         fieldKey="channel.driveArchiveFolderId"
@@ -2060,7 +2136,11 @@ const ChannelEditPage = () => {
                         })
                       }
                       placeholder="Например: 1O45ZqVwqqV5jMV83h_Y1JUZE89KaRic8"
-                      className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/40"
+                      className={`w-full rounded-xl border bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:ring-2 ${
+                        status.status === 'needs_setup' && status.missing.includes('ID папки архива Google Drive')
+                          ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/40'
+                          : 'border-white/10 focus:border-brand focus:ring-brand/40'
+                      }`}
                     />
                     <p className="text-xs text-slate-400">
                       Папка, куда будут перемещаться файлы после успешной публикации.
@@ -2069,7 +2149,11 @@ const ChannelEditPage = () => {
 
                   {/* Blotato API Key */}
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                    <label className={`flex items-center gap-2 text-sm font-medium ${
+                      status.status === 'needs_setup' && status.missing.includes('Blotato API key')
+                        ? 'text-red-300'
+                        : 'text-slate-200'
+                    }`}>
                       <span>Blotato API Key *</span>
                       <FieldHelpIcon
                         fieldKey="channel.blotataApiKey"
@@ -2094,7 +2178,11 @@ const ChannelEditPage = () => {
                         })
                       }
                       placeholder="blt_..."
-                      className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/40"
+                      className={`w-full rounded-xl border bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:ring-2 ${
+                        status.status === 'needs_setup' && status.missing.includes('Blotato API key')
+                          ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/40'
+                          : 'border-white/10 focus:border-brand focus:ring-brand/40'
+                      }`}
                     />
                     <p className="text-xs text-slate-400">
                       API ключ для доступа к Blotato. Если не указан, будет использован ключ из настроек сервера.
@@ -2103,7 +2191,11 @@ const ChannelEditPage = () => {
 
                   {/* ID площадок */}
                   <div className="space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-200">
+                    <h4 className={`text-sm font-semibold ${
+                      status.status === 'needs_setup' && status.missing.includes('ID хотя бы одной соцсети (YouTube/TikTok/Instagram и т.д.)')
+                        ? 'text-red-300'
+                        : 'text-slate-200'
+                    }`}>
                       ID аккаунтов в Blotato (укажите хотя бы один)
                     </h4>
                     
@@ -2482,7 +2574,9 @@ const ChannelEditPage = () => {
                   </div>
                 </div>
               )}
-            </div>
+                </Accordion>
+              );
+            })()}
 
             <div className="flex items-center justify-end gap-4 pt-4">
               <button

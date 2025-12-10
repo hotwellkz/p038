@@ -327,7 +327,7 @@ export const createEmptyChannel = (): Channel => {
     autoDownloadDelayMinutes: 10,
     uploadNotificationEnabled: false,
     uploadNotificationChatId: null,
-    blotataEnabled: false,
+    blotataEnabled: true, // По умолчанию включено для новых каналов
     driveInputFolderId: undefined,
     driveArchiveFolderId: undefined,
     blotataApiKey: undefined,
