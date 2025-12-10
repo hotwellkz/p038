@@ -643,5 +643,313 @@ router.post("/:id/test-youtube-title-description", authRequired, async (req, res
   }
 });
 
+/**
+ * GET /api/channels/export
+ * Экспортирует все каналы пользователя в JSON-файл
+ */
+router.get("/export", authRequired, async (req, res) => {
+  Logger.info("Channels export: request received", {
+    userId: req.user?.uid,
+    timestamp: new Date().toISOString()
+  });
+
+  if (!isFirestoreAvailable() || !db) {
+    return res.status(503).json({
+      error: "Firestore is not available",
+      message: "Firebase Admin не настроен"
+    });
+  }
+
+  try {
+    const userId = req.user!.uid;
+    
+    // Получаем все каналы пользователя
+    const channelsRef = db.collection("users").doc(userId).collection("channels");
+    const channelsSnapshot = await channelsRef.get();
+    
+    // Трансформируем каналы в формат экспорта, исключая чувствительные данные
+    const exportedChannels = channelsSnapshot.docs.map((doc) => {
+      const data = doc.data() as any;
+      
+      // Формируем объект экспорта без чувствительных полей
+      const exported: any = {
+        name: data.name,
+        platform: data.platform,
+        language: data.language,
+        targetDurationSec: data.targetDurationSec,
+        niche: data.niche || "",
+        audience: data.audience || "",
+        tone: data.tone || "",
+        blockedTopics: data.blockedTopics || "",
+        generationMode: data.generationMode || "script",
+        generationTransport: data.generationTransport || "telegram_global",
+        telegramSyntaxPeer: data.telegramSyntaxPeer || null,
+        preferences: data.preferences || null,
+        extraNotes: data.extraNotes || null,
+        timezone: data.timezone || null,
+        autoSendEnabled: data.autoSendEnabled || false,
+        autoSendSchedules: data.autoSendSchedules || [],
+        autoDownloadToDriveEnabled: data.autoDownloadToDriveEnabled || false,
+        autoDownloadDelayMinutes: data.autoDownloadDelayMinutes || 10,
+        uploadNotificationEnabled: data.uploadNotificationEnabled || false,
+        uploadNotificationChatId: data.uploadNotificationChatId || null,
+        blotataEnabled: data.blotataEnabled || false,
+        driveInputFolderId: data.driveInputFolderId || null,
+        driveArchiveFolderId: data.driveArchiveFolderId || null,
+        blotataYoutubeId: data.blotataYoutubeId || null,
+        blotataTiktokId: data.blotataTiktokId || null,
+        blotataInstagramId: data.blotataInstagramId || null,
+        blotataFacebookId: data.blotataFacebookId || null,
+        blotataFacebookPageId: data.blotataFacebookPageId || null,
+        blotataThreadsId: data.blotataThreadsId || null,
+        blotataTwitterId: data.blotataTwitterId || null,
+        blotataLinkedinId: data.blotataLinkedinId || null,
+        blotataPinterestId: data.blotataPinterestId || null,
+        blotataPinterestBoardId: data.blotataPinterestBoardId || null,
+        blotataBlueskyId: data.blotataBlueskyId || null,
+        youtubeUrl: data.youtubeUrl || null,
+        tiktokUrl: data.tiktokUrl || null,
+        instagramUrl: data.instagramUrl || null,
+        googleDriveFolderId: data.googleDriveFolderId || null
+      };
+      
+      return exported;
+    });
+    
+    // Формируем финальный объект экспорта
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      channels: exportedChannels
+    };
+    
+    // Формируем имя файла с датой
+    const dateStr = new Date().toISOString().split("T")[0];
+    const filename = `shorts-channels-${dateStr}.json`;
+    
+    Logger.info("Channels exported", {
+      userId,
+      channelCount: exportedChannels.length
+    });
+    
+    // Устанавливаем заголовки для скачивания файла
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.json(exportData);
+  } catch (error: any) {
+    Logger.error("Failed to export channels", error);
+    res.status(500).json({
+      error: "Internal server error",
+      message: error?.message || "Ошибка при экспорте каналов"
+    });
+  }
+});
+
+/**
+ * POST /api/channels/import
+ * Импортирует каналы из JSON-файла
+ * Body: { version: number, exportedAt: string, channels: Array }
+ */
+router.post("/import", authRequired, async (req, res) => {
+  Logger.info("Channels import: request received", {
+    userId: req.user?.uid,
+    contentLength: req.headers["content-length"],
+    timestamp: new Date().toISOString()
+  });
+
+  if (!isFirestoreAvailable() || !db) {
+    return res.status(503).json({
+      error: "Firestore is not available",
+      message: "Firebase Admin не настроен"
+    });
+  }
+
+  try {
+    const userId = req.user!.uid;
+    const { version, channels } = req.body;
+    
+    // Проверяем размер тела запроса
+    const contentLength = parseInt(req.headers["content-length"] || "0", 10);
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (contentLength > maxSize) {
+      Logger.warn("Channels import: payload too large", {
+        userId,
+        contentLength,
+        maxSize
+      });
+      return res.status(413).json({
+        error: "Payload too large",
+        message: `Размер файла превышает лимит (${(contentLength / (1024 * 1024)).toFixed(2)} MB). Максимальный размер: 10 MB`
+      });
+    }
+    
+    // Валидация формата
+    if (version !== 1) {
+      return res.status(400).json({
+        error: "Invalid version",
+        message: `Неподдерживаемая версия формата: ${version}. Поддерживается только версия 1.`
+      });
+    }
+    
+    if (!Array.isArray(channels) || channels.length === 0) {
+      return res.status(400).json({
+        error: "Invalid format",
+        message: "Файл не содержит каналов для импорта"
+      });
+    }
+    
+    // Получаем существующие каналы пользователя для проверки конфликтов имён
+    const channelsRef = db.collection("users").doc(userId).collection("channels");
+    const existingChannelsSnapshot = await channelsRef.get();
+    const existingChannelNames = new Set(
+      existingChannelsSnapshot.docs.map((doc) => doc.data().name)
+    );
+    
+    // Получаем максимальный orderIndex для новых каналов
+    let maxOrderIndex = -1;
+    existingChannelsSnapshot.docs.forEach((doc) => {
+      const orderIndex = doc.data().orderIndex ?? 0;
+      maxOrderIndex = Math.max(maxOrderIndex, orderIndex);
+    });
+    
+    const imported: string[] = [];
+    const skipped: string[] = [];
+    const errors: Array<{ channelName: string; error: string }> = [];
+    
+    // Обрабатываем каждый канал
+    for (const channelData of channels) {
+      try {
+        // Валидация обязательных полей
+        if (!channelData.name || typeof channelData.name !== "string") {
+          errors.push({
+            channelName: channelData.name || "Без названия",
+            error: "Отсутствует или некорректное имя канала"
+          });
+          continue;
+        }
+        
+        if (!channelData.platform || !channelData.language || !channelData.targetDurationSec) {
+          errors.push({
+            channelName: channelData.name,
+            error: "Отсутствуют обязательные поля: platform, language или targetDurationSec"
+          });
+          continue;
+        }
+        
+        // Проверяем конфликт имён и добавляем суффикс при необходимости
+        let finalName = channelData.name;
+        if (existingChannelNames.has(finalName)) {
+          let counter = 1;
+          let candidateName = `${finalName} (imported)`;
+          while (existingChannelNames.has(candidateName)) {
+            counter++;
+            candidateName = `${finalName} (imported ${counter})`;
+          }
+          finalName = candidateName;
+        }
+        
+        // Добавляем имя в множество существующих для следующей итерации
+        existingChannelNames.add(finalName);
+        
+        // Формируем данные для создания канала
+        const newChannelData: any = {
+          name: finalName,
+          platform: channelData.platform,
+          language: channelData.language,
+          targetDurationSec: channelData.targetDurationSec,
+          niche: channelData.niche || "",
+          audience: channelData.audience || "",
+          tone: channelData.tone || "",
+          blockedTopics: channelData.blockedTopics || "",
+          generationMode: channelData.generationMode || "script",
+          generationTransport: channelData.generationTransport || "telegram_global",
+          telegramSyntaxPeer: channelData.telegramSyntaxPeer || null,
+          autoSendEnabled: channelData.autoSendEnabled || false,
+          autoSendSchedules: channelData.autoSendSchedules || [],
+          autoDownloadToDriveEnabled: channelData.autoDownloadToDriveEnabled || false,
+          autoDownloadDelayMinutes: channelData.autoDownloadDelayMinutes || 10,
+          uploadNotificationEnabled: channelData.uploadNotificationEnabled || false,
+          uploadNotificationChatId: channelData.uploadNotificationChatId || null,
+          blotataEnabled: channelData.blotataEnabled || false,
+          driveInputFolderId: channelData.driveInputFolderId || null,
+          driveArchiveFolderId: channelData.driveArchiveFolderId || null,
+          blotataYoutubeId: channelData.blotataYoutubeId || null,
+          blotataTiktokId: channelData.blotataTiktokId || null,
+          blotataInstagramId: channelData.blotataInstagramId || null,
+          blotataFacebookId: channelData.blotataFacebookId || null,
+          blotataFacebookPageId: channelData.blotataFacebookPageId || null,
+          blotataThreadsId: channelData.blotataThreadsId || null,
+          blotataTwitterId: channelData.blotataTwitterId || null,
+          blotataLinkedinId: channelData.blotataLinkedinId || null,
+          blotataPinterestId: channelData.blotataPinterestId || null,
+          blotataPinterestBoardId: channelData.blotataPinterestBoardId || null,
+          blotataBlueskyId: channelData.blotataBlueskyId || null,
+          youtubeUrl: channelData.youtubeUrl || null,
+          tiktokUrl: channelData.tiktokUrl || null,
+          instagramUrl: channelData.instagramUrl || null,
+          googleDriveFolderId: channelData.googleDriveFolderId || null,
+          orderIndex: ++maxOrderIndex,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        
+        // Добавляем опциональные поля только если они есть
+        if (channelData.preferences) {
+          newChannelData.preferences = channelData.preferences;
+        }
+        if (channelData.extraNotes) {
+          newChannelData.extraNotes = channelData.extraNotes;
+        }
+        if (channelData.timezone) {
+          newChannelData.timezone = channelData.timezone;
+        }
+        
+        // Создаём канал в Firestore
+        await channelsRef.add(newChannelData);
+        
+        imported.push(finalName);
+        
+        Logger.info("Channel imported", {
+          userId,
+          originalName: channelData.name,
+          finalName,
+          wasRenamed: finalName !== channelData.name
+        });
+      } catch (error: any) {
+        Logger.error("Failed to import channel", {
+          userId,
+          channelName: channelData.name,
+          error: error?.message || String(error)
+        });
+        
+        errors.push({
+          channelName: channelData.name || "Без названия",
+          error: error?.message || "Неизвестная ошибка при импорте"
+        });
+      }
+    }
+    
+    Logger.info("Channels import completed", {
+      userId,
+      imported: imported.length,
+      skipped: skipped.length,
+      errors: errors.length
+    });
+    
+    res.json({
+      success: true,
+      imported: imported.length,
+      skipped: skipped.length,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (error: any) {
+    Logger.error("Failed to import channels", error);
+    res.status(500).json({
+      error: "Internal server error",
+      message: error?.message || "Ошибка при импорте каналов"
+    });
+  }
+});
+
 export default router;
 

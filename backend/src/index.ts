@@ -80,7 +80,8 @@ app.use(
     credentials: true
   })
 );
-app.use(express.json());
+// Увеличиваем лимит размера тела запроса для импорта каналов (до 10MB)
+app.use(express.json({ limit: "10mb" }));
 app.use(express.static("public")); // Для статических файлов (HTML страница для OAuth)
 
 app.use("/api/telegram", telegramRoutes);

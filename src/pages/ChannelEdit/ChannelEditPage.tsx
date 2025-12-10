@@ -17,6 +17,8 @@ import { testBlottata } from "../../api/blottata";
 import { getTelegramStatus } from "../../api/telegramIntegration";
 import Accordion from "../../components/Accordion";
 import { fetchScheduleSettings, getMinIntervalForTime, type ScheduleSettings } from "../../api/scheduleSettings";
+import { useToast } from "../../hooks/useToast";
+import Toast from "../../components/Toast";
 
 const PLATFORMS: { value: SupportedPlatform; label: string }[] = [
   { value: "YOUTUBE_SHORTS", label: "YouTube Shorts" },
@@ -73,6 +75,7 @@ const ChannelEditPage = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [channel, setChannel] = useState<Channel | null>(null);
+  const { toasts, showError, removeToast } = useToast();
   const [urlErrors, setUrlErrors] = useState<{
     youtube?: string;
     tiktok?: string;
@@ -99,19 +102,32 @@ const ChannelEditPage = () => {
         if (found) {
           setChannel(found);
         } else {
-          setError("Канал не найден");
+          const errorMsg = "Канал не найден";
+          setError(errorMsg);
+          showError(errorMsg, 8000);
         }
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Ошибка при загрузке канала"
-        );
+        const errorMsg = err instanceof Error ? err.message : "Ошибка при загрузке канала";
+        setError(errorMsg);
+        showError(errorMsg, 8000);
       } finally {
         setLoading(false);
       }
     };
 
     void loadChannel();
-  }, [user?.uid, channelId, navigate, fetchChannels]);
+  }, [user?.uid, channelId, navigate, fetchChannels, showError]);
+
+  // Очищаем toast при размонтировании компонента или смене страницы
+  useEffect(() => {
+    return () => {
+      // Очищаем все toast при размонтировании
+      if (toasts.length > 0) {
+        toasts.forEach((toast) => removeToast(toast.id));
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Загружаем статус Telegram интеграции
   useEffect(() => {
@@ -217,43 +233,57 @@ const ChannelEditPage = () => {
     }
 
     if (!channel.name.trim()) {
-      setError("Название канала обязательно");
+      const errorMsg = "Название канала обязательно";
+      setError(errorMsg);
+      showError(errorMsg, 6000);
       return;
     }
 
     if (!validateUrls()) {
-      setError("Проверьте корректность введённых URL");
+      const errorMsg = "Проверьте корректность введённых URL";
+      setError(errorMsg);
+      showError(errorMsg, 6000);
       return;
     }
 
     // Валидация preferences
     const preferencesValidation = validatePreferences(channel.preferences);
     if (!preferencesValidation.valid) {
-      setError(preferencesValidation.error || "Проверьте настройки пожеланий");
+      const errorMsg = preferencesValidation.error || "Проверьте настройки пожеланий";
+      setError(errorMsg);
+      showError(errorMsg, 6000);
       return;
     }
 
     // Валидация расписания автоотправки
     if (channel.autoSendEnabled) {
       if (!channel.timezone || channel.timezone.trim() === "") {
-        setError("Укажите временную зону для автоотправки");
+        const errorMsg = "Укажите временную зону для автоотправки";
+        setError(errorMsg);
+        showError(errorMsg, 6000);
         return;
       }
 
       const schedules = channel.autoSendSchedules || [];
       for (const schedule of schedules) {
         if (!schedule.time || !schedule.time.match(/^\d{2}:\d{2}$/)) {
-          setError("Укажите корректное время в формате HH:MM для всех расписаний");
+          const errorMsg = "Укажите корректное время в формате HH:MM для всех расписаний";
+          setError(errorMsg);
+          showError(errorMsg, 6000);
           return;
         }
 
         if (!schedule.daysOfWeek || schedule.daysOfWeek.length === 0) {
-          setError("Выберите хотя бы один день недели для всех расписаний");
+          const errorMsg = "Выберите хотя бы один день недели для всех расписаний";
+          setError(errorMsg);
+          showError(errorMsg, 6000);
           return;
         }
 
         if (schedule.promptsPerRun < 1 || schedule.promptsPerRun > 10) {
-          setError("Количество промптов за запуск должно быть от 1 до 10");
+          const errorMsg = "Количество промптов за запуск должно быть от 1 до 10";
+          setError(errorMsg);
+          showError(errorMsg, 6000);
           return;
         }
       }
@@ -264,13 +294,17 @@ const ChannelEditPage = () => {
       // Используем значение по умолчанию, если поле пустое
       const syntaxPeer = channel.telegramSyntaxPeer || '@syntxaibot';
       if (!syntaxPeer || syntaxPeer.trim() === "") {
-        setError("Для использования личного Telegram аккаунта необходимо указать username или ID чата Syntax");
+        const errorMsg = "Для использования личного Telegram аккаунта необходимо указать username или ID чата Syntax";
+        setError(errorMsg);
+        showError(errorMsg, 6000);
         return;
       }
       
       // Проверяем статус Telegram интеграции
       if (!telegramStatusLoading && telegramStatus?.status !== "active") {
-        setError("Для использования личного Telegram аккаунта необходимо привязать Telegram в настройках профиля");
+        const errorMsg = "Для использования личного Telegram аккаунта необходимо привязать Telegram в настройках профиля";
+        setError(errorMsg);
+        showError(errorMsg, 6000);
         return;
       }
     }
@@ -278,15 +312,21 @@ const ChannelEditPage = () => {
     // Валидация настроек Blottata
     if (channel.blotataEnabled) {
       if (!channel.driveInputFolderId || channel.driveInputFolderId.trim() === "") {
-        setError("Для автопубликации через Blottata необходимо указать ID входной папки Google Drive");
+        const errorMsg = "Для автопубликации через Blottata необходимо указать ID входной папки Google Drive";
+        setError(errorMsg);
+        showError(errorMsg, 6000);
         return;
       }
       if (!channel.driveArchiveFolderId || channel.driveArchiveFolderId.trim() === "") {
-        setError("Для автопубликации через Blottata необходимо указать ID папки архива Google Drive");
+        const errorMsg = "Для автопубликации через Blottata необходимо указать ID папки архива Google Drive";
+        setError(errorMsg);
+        showError(errorMsg, 6000);
         return;
       }
       if (!channel.blotataApiKey || channel.blotataApiKey.trim() === "") {
-        setError("Для автопубликации через Blottata необходимо указать API ключ");
+        const errorMsg = "Для автопубликации через Blottata необходимо указать API ключ";
+        setError(errorMsg);
+        showError(errorMsg, 6000);
         return;
       }
       
@@ -303,7 +343,9 @@ const ChannelEditPage = () => {
         channel.blotataBlueskyId;
       
       if (!hasPlatformId) {
-        setError("Для автопубликации через Blottata необходимо указать хотя бы один ID площадки (YouTube, TikTok, Instagram и т.д.)");
+        const errorMsg = "Для автопубликации через Blottata необходимо указать хотя бы один ID площадки (YouTube, TikTok, Instagram и т.д.)";
+        setError(errorMsg);
+        showError(errorMsg, 6000);
         return;
       }
     }
@@ -323,9 +365,22 @@ const ChannelEditPage = () => {
       await updateChannel(user.uid, channelToSave);
       navigate("/channels", { replace: true });
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Ошибка при обновлении канала"
-      );
+      const errorMsg = err instanceof Error 
+        ? err.message 
+        : "Ошибка при обновлении канала";
+      
+      // Улучшаем сообщение об ошибке для пользователя
+      let userFriendlyMsg = errorMsg;
+      if (errorMsg.includes("No document to update")) {
+        userFriendlyMsg = "Ошибка сохранения. Попробуйте обновить страницу и сохранить снова.";
+      } else if (errorMsg.includes("permission") || errorMsg.includes("Permission")) {
+        userFriendlyMsg = "Недостаточно прав для сохранения. Проверьте авторизацию.";
+      } else if (errorMsg.includes("network") || errorMsg.includes("fetch")) {
+        userFriendlyMsg = "Ошибка сети. Проверьте подключение к интернету.";
+      }
+      
+      setError(userFriendlyMsg);
+      showError(userFriendlyMsg, 8000);
       setSaving(false);
     }
   };
@@ -406,6 +461,36 @@ const ChannelEditPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6 lg:px-8">
+      {/* Toast уведомления - фиксированная позиция сверху, поддерживаем несколько */}
+      <div className="fixed left-0 right-0 top-0 z-[10002] pointer-events-none px-4 pt-4 sm:px-6 sm:pt-6">
+        <div className="relative mx-auto max-w-md">
+          {toasts.map((toast, index) => (
+            <div
+              key={toast.id}
+              className="pointer-events-auto mb-2"
+              style={{
+                position: index === 0 ? "relative" : "absolute",
+                top: index === 0 ? 0 : `${index * 80}px`,
+                width: "100%",
+                transition: "top 0.2s ease-out"
+              }}
+            >
+              <Toast 
+                toast={toast} 
+                onClose={removeToast}
+                onClick={() => {
+                  // При клике на toast прокручиваем к форме
+                  const form = document.querySelector('form');
+                  if (form) {
+                    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+      
       <div className="mx-auto w-full max-w-[1100px]">
         {/* Заголовок страницы */}
         <div className="mb-6">
@@ -455,11 +540,6 @@ const ChannelEditPage = () => {
                 </button>
               </div>
             </div>
-            {error && (
-              <div className="rounded-lg border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200">
-                {error}
-              </div>
-            )}
 
             {/* Основные настройки канала - сворачиваемый блок */}
             <Accordion

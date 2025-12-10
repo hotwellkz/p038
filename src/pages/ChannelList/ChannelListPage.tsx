@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Loader2, Plus, Video, Wand2, Calendar, MoreVertical, Bell, Grid3x3, List, User, LogOut, Search, X, AlignJustify, Play, Edit2 } from "lucide-react";
+import { Loader2, Plus, Video, Wand2, Calendar, MoreVertical, Bell, Grid3x3, List, User, LogOut, Search, X, AlignJustify, Play, Edit2, Download, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   DndContext,
@@ -21,6 +21,7 @@ import ChannelCard from "../../components/ChannelCard";
 import ChannelCardCompact from "../../components/ChannelCardCompact";
 import AIAutoGenerateModal from "../../components/AIAutoGenerateModal";
 import CustomPromptModal from "../../components/CustomPromptModal";
+import ChannelImportModal from "../../components/ChannelImportModal";
 import UserMenu from "../../components/UserMenu";
 import NotificationBell from "../../components/NotificationBell";
 import { useAuthStore } from "../../stores/authStore";
@@ -28,6 +29,11 @@ import { useChannelStore } from "../../stores/channelStore";
 import type { Channel } from "../../domain/channel";
 import { calculateChannelStates, type ChannelStateInfo } from "../../utils/channelAutomationState";
 import { fetchScheduleSettings } from "../../api/scheduleSettings";
+import { getAuthToken } from "../../utils/auth";
+
+const backendBaseUrl =
+  (import.meta.env.VITE_BACKEND_URL as string | undefined) ||
+  "http://localhost:8080";
 
 const ChannelListPage = () => {
   const navigate = useNavigate();
@@ -52,6 +58,9 @@ const ChannelListPage = () => {
   const [isCustomPromptModalOpen, setIsCustomPromptModalOpen] = useState(false);
   const [selectedChannelForCustomPrompt, setSelectedChannelForCustomPrompt] =
     useState<Channel | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [localChannels, setLocalChannels] = useState<Channel[]>([]);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [channelStates, setChannelStates] = useState<Map<string, ChannelStateInfo>>(new Map());
@@ -265,55 +274,160 @@ const ChannelListPage = () => {
     navigate("/settings");
   };
 
+  const handleExport = async () => {
+    if (!user?.uid) {
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      // Получаем токен авторизации
+      const token = await getAuthToken();
+
+      const exportUrl = `${backendBaseUrl}/api/channels/export`;
+      
+      // Логируем для отладки (только в development)
+      if (import.meta.env.DEV) {
+        console.log("Export: отправка запроса", {
+          url: exportUrl,
+          backendBaseUrl,
+          hasToken: !!token
+        });
+      }
+
+      const response = await fetch(exportUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Не удалось экспортировать каналы");
+      }
+
+      // Получаем имя файла из заголовка Content-Disposition или используем дефолтное
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = "shorts-channels.json";
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Скачиваем файл
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      // Показываем успешное сообщение
+      setToast({ 
+        message: `Экспортировано каналов: ${channels.length}`, 
+        type: "success" 
+      });
+      setTimeout(() => setToast(null), 3000);
+    } catch (error: any) {
+      console.error("Export error:", error);
+      
+      // Определяем тип ошибки
+      let errorMessage = "Не удалось экспортировать каналы. Попробуйте позже.";
+      if (error instanceof TypeError && error.message.includes("Failed to fetch")) {
+        errorMessage = "Не удалось подключиться к серверу. Проверьте, запущен ли backend.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setToast({ message: errorMessage, type: "error" });
+      setTimeout(() => setToast(null), 5000);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportClick = () => {
+    setIsImportModalOpen(true);
+  };
+
+  const handleImportClose = () => {
+    setIsImportModalOpen(false);
+    // Обновляем список каналов после импорта
+    if (user?.uid) {
+      void fetchChannels(user.uid);
+    }
+  };
+
   return (
     <div className="relative min-h-screen px-3 py-3 text-white sm:px-4 sm:py-10 md:py-4 lg:py-6">
       {/* Премиальный фон */}
       <div className="channels-premium-bg" />
       
       <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-3 sm:gap-4 md:gap-4 lg:gap-6">
+        {/* Toast уведомления */}
+        {toast && (
+          <div
+            className={`fixed top-4 right-4 z-[10001] rounded-lg px-4 py-3 shadow-lg backdrop-blur-sm transition-all ${
+              toast.type === "success"
+                ? "bg-green-500/90 text-white"
+                : "bg-red-500/90 text-white"
+            }`}
+            onClick={() => setToast(null)}
+            role="alert"
+          >
+            {toast.message}
+          </div>
+        )}
+
         {/* Десктопная версия заголовка */}
-        <header className="hidden flex-col gap-2 rounded-2xl channels-premium-header p-4 md:flex lg:p-5 lg:gap-3">
-          {/* Первая строка: заголовок + описание + кнопки */}
-          <div className="flex items-start justify-between gap-4">
-            {/* Левая часть: заголовок, описание, "Вы вошли как..." */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-baseline gap-2 flex-wrap">
+        <header className="hidden flex-col gap-3 rounded-2xl channels-premium-header p-4 md:flex lg:p-5">
+          {/* Основной контейнер: заголовок слева, кнопки справа */}
+          <div className="flex items-start justify-between gap-4 lg:gap-6">
+            {/* Левая часть: заголовок и описание (ограничиваем ширину) */}
+            <div className="flex-1 min-w-0 max-w-[45%]">
+              <div className="flex items-baseline gap-2 flex-wrap mb-1">
                 <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500 font-medium">
                   Панель канала
                 </p>
                 {user && (
-                  <p className="text-[10px] text-slate-500">
+                  <p className="text-[10px] text-slate-500 truncate">
                     Вы вошли как <span className="text-slate-400 font-medium">{user.email}</span>
                   </p>
                 )}
               </div>
-              <div className="flex items-baseline gap-3 mt-1">
-                <h1 className="text-2xl lg:text-3xl font-bold premium-title">
-                  Ваши каналы ({channels.length})
-                </h1>
-              </div>
-              <p className="mt-1 text-xs lg:text-sm text-slate-400 premium-subtitle leading-snug">
+              <h1 className="text-xl lg:text-2xl font-bold premium-title mb-1">
+                Ваши каналы ({channels.length})
+              </h1>
+              <p className="text-xs text-slate-400 premium-subtitle leading-snug line-clamp-2">
                 Управляйте настройками, запускайте генерации сценариев и создавайте
                 новые каналы под разные соцсети.
               </p>
             </div>
 
             {/* Правая часть: кнопки, переключатели, аватар */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+              {/* Группа основных кнопок */}
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   type="button"
                   onClick={goToWizard}
-                  className="premium-btn-primary inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white lg:px-4 lg:py-2 lg:text-sm"
+                  className="premium-btn-primary inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white lg:px-3.5 lg:py-2 lg:text-sm"
                 >
                   <Plus size={14} className="lg:w-4 lg:h-4" />
-                  <span className="hidden lg:inline">Создать канал</span>
-                  <span className="lg:hidden">Создать</span>
+                  <span className="hidden lg:inline">Создать</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate("/channels/schedule")}
-                  className="premium-btn-secondary inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs text-slate-200 lg:px-4 lg:py-2 lg:text-sm"
+                  className="premium-btn-secondary inline-flex items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs text-slate-200 lg:px-3 lg:py-2 lg:text-sm"
+                  title="Расписание"
                 >
                   <Calendar size={14} className="lg:w-4 lg:h-4" />
                   <span className="hidden xl:inline">Расписание</span>
@@ -321,10 +435,34 @@ const ChannelListPage = () => {
                 <button
                   type="button"
                   onClick={() => navigate("/scripts")}
-                  className="premium-btn-secondary inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs text-slate-200 lg:px-4 lg:py-2 lg:text-sm"
+                  className="premium-btn-secondary inline-flex items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs text-slate-200 lg:px-3 lg:py-2 lg:text-sm"
+                  title="Генератор"
                 >
                   <Wand2 size={14} className="lg:w-4 lg:h-4" />
                   <span className="hidden xl:inline">Генератор</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  disabled={isExporting || channels.length === 0}
+                  className="premium-btn-secondary inline-flex items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs text-slate-200 lg:px-3 lg:py-2 lg:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Экспорт каналов"
+                >
+                  {isExporting ? (
+                    <Loader2 size={14} className="lg:w-4 lg:h-4 animate-spin" />
+                  ) : (
+                    <Download size={14} className="lg:w-4 lg:h-4" />
+                  )}
+                  <span className="hidden xl:inline">Экспорт</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleImportClick}
+                  className="premium-btn-secondary inline-flex items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs text-slate-200 lg:px-3 lg:py-2 lg:text-sm"
+                  title="Импорт каналов"
+                >
+                  <Upload size={14} className="lg:w-4 lg:h-4" />
+                  <span className="hidden xl:inline">Импорт</span>
                 </button>
               </div>
               {/* Переключатель раскладки Grid/List/Compact */}
@@ -332,7 +470,7 @@ const ChannelListPage = () => {
                 <button
                   type="button"
                   onClick={() => setLayoutMode("grid")}
-                  className={`flex items-center justify-center rounded-lg px-2 py-1.5 text-xs transition-all lg:px-2.5 lg:py-2 ${
+                  className={`flex items-center justify-center rounded-lg px-2 py-1.5 text-xs transition-all lg:px-2 lg:py-1.5 ${
                     layoutMode === "grid"
                       ? "bg-brand text-white shadow-lg"
                       : "text-slate-300 hover:text-white"
@@ -344,7 +482,7 @@ const ChannelListPage = () => {
                 <button
                   type="button"
                   onClick={() => setLayoutMode("list")}
-                  className={`flex items-center justify-center rounded-lg px-2 py-1.5 text-xs transition-all lg:px-2.5 lg:py-2 ${
+                  className={`flex items-center justify-center rounded-lg px-2 py-1.5 text-xs transition-all lg:px-2 lg:py-1.5 ${
                     layoutMode === "list"
                       ? "bg-brand text-white shadow-lg"
                       : "text-slate-300 hover:text-white"
@@ -356,7 +494,7 @@ const ChannelListPage = () => {
                 <button
                   type="button"
                   onClick={() => setLayoutMode("compact")}
-                  className={`flex items-center justify-center rounded-lg px-2 py-1.5 text-xs transition-all lg:px-2.5 lg:py-2 ${
+                  className={`flex items-center justify-center rounded-lg px-2 py-1.5 text-xs transition-all lg:px-2 lg:py-1.5 ${
                     layoutMode === "compact"
                       ? "bg-brand text-white shadow-lg"
                       : "text-slate-300 hover:text-white"
@@ -511,6 +649,35 @@ const ChannelListPage = () => {
                       >
                         <Wand2 size={16} />
                         Генератор
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleExport();
+                          setShowMobileMenu(false);
+                          setMenuPosition(null);
+                        }}
+                        disabled={isExporting || channels.length === 0}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-800/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isExporting ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Download size={16} />
+                        )}
+                        Экспорт каналов
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleImportClick();
+                          setShowMobileMenu(false);
+                          setMenuPosition(null);
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-800/50"
+                      >
+                        <Upload size={16} />
+                        Импорт каналов
                       </button>
                       <div className="my-2 border-t border-white/10" />
                       {/* Переключатель раскладки для мобильной версии */}
@@ -799,6 +966,12 @@ const ChannelListPage = () => {
           onSuccess={handleCustomPromptSuccess}
         />
       )}
+
+      {/* Channel Import Modal */}
+      <ChannelImportModal
+        isOpen={isImportModalOpen}
+        onClose={handleImportClose}
+      />
     </div>
   );
 };

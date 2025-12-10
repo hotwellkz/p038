@@ -8,6 +8,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc
 } from "firebase/firestore";
 import { db } from "../services/firebase";
@@ -100,10 +101,14 @@ export const channelRepository: ChannelRepository = {
   async updateChannel(uid, channel) {
     const docRef = doc(db, "users", uid, "channels", channel.id);
     
+    // Проверяем существование документа перед обновлением
+    const docSnap = await getDoc(docRef);
+    
     // DEBUG: Логируем, что сохраняется (только в development)
     if (import.meta.env.DEV) {
       console.log("DEBUG updateChannel payload", {
         id: channel.id,
+        exists: docSnap.exists(),
         autoSendEnabled: channel.autoSendEnabled,
         timezone: channel.timezone,
         autoSendSchedules: channel.autoSendSchedules,
@@ -115,10 +120,29 @@ export const channelRepository: ChannelRepository = {
     // Используем channelConverter.toFirestore() для правильной обработки undefined значений
     const firestoreData = channelConverter.toFirestore(channel);
     
-    // Удаляем createdAt из обновления, так как это поле не должно изменяться
-    const { createdAt, ...updateData } = firestoreData;
-    
-    await updateDoc(docRef, updateData);
+    if (docSnap.exists()) {
+      // Документ существует - обновляем его
+      // Удаляем createdAt из обновления, так как это поле не должно изменяться
+      const { createdAt, ...updateData } = firestoreData;
+      await updateDoc(docRef, updateData);
+    } else {
+      // Документ не существует - создаём новый с помощью setDoc
+      // Убеждаемся, что createdAt установлен для нового документа
+      if (!firestoreData.createdAt) {
+        firestoreData.createdAt = serverTimestamp() as any;
+      }
+      // Используем setDoc без merge для создания нового документа со всеми полями
+      await setDoc(docRef, firestoreData);
+      
+      if (import.meta.env.DEV) {
+        console.log("DEBUG updateChannel: создан новый документ", {
+          path: docRef.path,
+          channelId: channel.id,
+          hasCreatedAt: !!firestoreData.createdAt,
+          hasUpdatedAt: !!firestoreData.updatedAt
+        });
+      }
+    }
   },
 
   async deleteChannel(uid, channelId) {
@@ -128,9 +152,24 @@ export const channelRepository: ChannelRepository = {
 
   async reorderChannels(uid, orderedIds) {
     // Обновляем orderIndex для каждого канала по порядку в массиве
-    const updatePromises = orderedIds.map((channelId, index) => {
+    // Проверяем существование документов перед обновлением
+    const updatePromises = orderedIds.map(async (channelId, index) => {
       const docRef = doc(db, "users", uid, "channels", channelId);
-      return updateDoc(docRef, { orderIndex: index });
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        return updateDoc(docRef, { orderIndex: index });
+      } else {
+        // Если документ не существует, пропускаем его
+        // Это может произойти, если канал был удалён, но остался в списке
+        if (import.meta.env.DEV) {
+          console.warn("reorderChannels: документ не существует, пропускаем", {
+            channelId,
+            path: docRef.path
+          });
+        }
+        return Promise.resolve();
+      }
     });
     await Promise.all(updatePromises);
   }
