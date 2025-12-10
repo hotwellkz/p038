@@ -262,3 +262,102 @@ export async function createChannelFolders(params: {
   }
 }
 
+/**
+ * Создаёт структуру папок для канала в мастере (без channelId)
+ * Используется до создания канала в БД
+ * @param userId - ID пользователя
+ * @param channelName - Название канала
+ * @param channelUuid - Временный UUID для канала (опционально, если не указан - генерируется)
+ * @returns Объект с ID основной папки и папки архива
+ */
+export async function createChannelFoldersForWizard(params: {
+  userId: string;
+  channelName: string;
+  channelUuid?: string;
+}): Promise<{
+  rootFolderId: string;
+  archiveFolderId: string;
+  rootFolderName: string;
+  archiveFolderName: string;
+}> {
+  const { userId, channelName, channelUuid } = params;
+  
+  // Генерируем временный UUID, если не указан
+  const tempChannelId = channelUuid || `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+  try {
+    Logger.info("Starting channel folders creation for wizard", {
+      userId,
+      channelName,
+      tempChannelId
+    });
+
+    // 1. Создаём основную папку канала
+    const rootFolderName = `${channelName} — ${tempChannelId}`;
+    const rootFolder = await createUserFolder({
+      userId,
+      folderName: rootFolderName,
+      parentId: undefined // Создаём в корне
+    });
+
+    Logger.info("Root folder created for wizard", {
+      userId,
+      tempChannelId,
+      rootFolderId: rootFolder.folderId,
+      rootFolderName
+    });
+
+    // 2. Создаём папку uploaded внутри основной папки
+    const archiveFolderName = "uploaded";
+    const archiveFolder = await createUserFolder({
+      userId,
+      folderName: archiveFolderName,
+      parentId: rootFolder.folderId
+    });
+
+    Logger.info("Archive folder created for wizard", {
+      userId,
+      tempChannelId,
+      archiveFolderId: archiveFolder.folderId,
+      archiveFolderName,
+      parentFolderId: rootFolder.folderId
+    });
+
+    // 3. Выдаём права сервис-аккаунту на обе папки
+    await shareFolderWithServiceAccount({
+      userId,
+      folderId: rootFolder.folderId,
+      role: "writer"
+    });
+
+    await shareFolderWithServiceAccount({
+      userId,
+      folderId: archiveFolder.folderId,
+      role: "writer"
+    });
+
+    Logger.info("Channel folders created and shared successfully for wizard", {
+      userId,
+      tempChannelId,
+      rootFolderId: rootFolder.folderId,
+      archiveFolderId: archiveFolder.folderId
+    });
+
+    return {
+      rootFolderId: rootFolder.folderId,
+      archiveFolderId: archiveFolder.folderId,
+      rootFolderName,
+      archiveFolderName
+    };
+  } catch (error: any) {
+    Logger.error("Failed to create channel folders for wizard", {
+      userId,
+      channelName,
+      tempChannelId,
+      error: error?.message || String(error),
+      errorCode: error?.code
+    });
+    throw error;
+  }
+}
+

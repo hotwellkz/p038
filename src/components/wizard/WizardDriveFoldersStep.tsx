@@ -1,18 +1,18 @@
 import { useState, useEffect } from "react";
 import { Loader2, CheckCircle2, FolderPlus, AlertCircle } from "lucide-react";
-import { generateDriveFolders } from "../../api/channelDriveFolders";
+import { generateDriveFoldersForWizard } from "../../api/channelDriveFolders";
 import { useIntegrationsStatus } from "../../hooks/useIntegrationsStatus";
 import { FieldHelpIcon } from "../aiAssistant/FieldHelpIcon";
 
 interface WizardDriveFoldersStepProps {
-  channelId: string;
   channelName: string;
+  channelUuid?: string;
   onComplete: (rootFolderId: string, archiveFolderId: string) => void;
 }
 
 export function WizardDriveFoldersStep({
-  channelId,
   channelName,
+  channelUuid,
   onComplete
 }: WizardDriveFoldersStepProps) {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -28,11 +28,19 @@ export function WizardDriveFoldersStep({
       return;
     }
 
+    if (!channelName || channelName.trim().length === 0) {
+      setError("Название канала не может быть пустым");
+      return;
+    }
+
     setIsGenerating(true);
     setError(null);
 
     try {
-      const result = await generateDriveFolders(channelId);
+      const result = await generateDriveFoldersForWizard({
+        channelName: channelName.trim(),
+        channelUuid
+      });
 
       if (result.success && result.rootFolderId && result.archiveFolderId) {
         setRootFolderId(result.rootFolderId);
@@ -55,12 +63,12 @@ export function WizardDriveFoldersStep({
         const errorCode = error.code || error.message;
         const errorText = error.message.toLowerCase();
         
-        if (errorCode === "CHANNEL_NOT_FOUND" || errorText.includes("канал не найден")) {
-          errorMessage = "Канал не найден. Обновите страницу и попробуйте снова.";
-        } else if (errorCode === "GOOGLE_DRIVE_NOT_CONNECTED" || errorText.includes("google_drive_not_connected")) {
+        if (errorCode === "GOOGLE_DRIVE_NOT_CONNECTED" || errorText.includes("google_drive_not_connected")) {
           errorMessage = "Сначала подключите Google Drive";
         } else if (errorCode === "INSUFFICIENT_PERMISSIONS" || errorText.includes("insufficient_permissions")) {
           errorMessage = "Ваш аккаунт Google не выдал необходимые разрешения. Переподключите Google Drive.";
+        } else if (errorCode === "INVALID_CHANNEL_NAME") {
+          errorMessage = "Название канала не может быть пустым";
         } else {
           errorMessage = error.message || errorMessage;
         }
@@ -89,9 +97,9 @@ export function WizardDriveFoldersStep({
             label="Создание папок для канала"
           />
         </div>
-        <div className="rounded-lg border border-amber-500/30 bg-amber-900/20 p-4">
-          <p className="text-sm text-amber-200">
-            Для создания папок необходимо подключить Google Drive. Вернитесь к предыдущему шагу и подключите Google Drive.
+        <div className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-900/20 via-amber-900/15 to-transparent px-4 py-3 md:rounded-2xl md:px-5 md:py-3.5">
+          <p className="text-sm leading-relaxed text-amber-200 md:text-base">
+            <span className="font-semibold">⚠️ Для создания папок необходимо подключить Google Drive.</span> Вернитесь к предыдущему шагу и подключите Google Drive.
           </p>
         </div>
       </div>
@@ -136,9 +144,11 @@ export function WizardDriveFoldersStep({
           label="Создание папок для канала"
         />
       </div>
-      <p className="text-xs text-slate-400 md:text-sm">
-        Будет создана основная папка канала и подпапка «uploaded». Система назначит необходимые права и автоматически заполнит настройки канала.
-      </p>
+      <div className="rounded-xl border border-brand/20 bg-gradient-to-r from-brand/10 via-brand/5 to-transparent px-4 py-3 md:rounded-2xl md:px-5 md:py-3.5">
+        <p className="text-xs leading-relaxed text-slate-300 md:text-sm">
+          <span className="font-semibold text-brand-300">📁 Папки будут созданы автоматически</span> в вашем Google Drive. Будет создана основная папка канала и подпапка «uploaded». Система назначит необходимые права и автоматически заполнит настройки канала.
+        </p>
+      </div>
 
       {/* Ошибки */}
       {error && (

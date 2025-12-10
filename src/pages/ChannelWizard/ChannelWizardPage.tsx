@@ -1,6 +1,6 @@
 import { useState, FormEvent, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Sparkles, FileText, Video, Zap } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { useChannelStore } from "../../stores/channelStore";
 import type {
@@ -109,6 +109,10 @@ const ChannelWizardPage = () => {
   const [telegramStatus, setTelegramStatus] = useState<{ status: string } | null>(null);
   const [telegramStatusLoading, setTelegramStatusLoading] = useState(true);
   const [createdChannelId, setCreatedChannelId] = useState<string | null>(null);
+  const [wizardDriveFolders, setWizardDriveFolders] = useState<{
+    rootFolderId: string;
+    archiveFolderId: string;
+  } | null>(null);
   const [nicheGenerating, setNicheGenerating] = useState(false);
   const [audienceGenerating, setAudienceGenerating] = useState(false);
   const [forbiddenTopicsGenerating, setForbiddenTopicsGenerating] = useState(false);
@@ -288,6 +292,8 @@ const ChannelWizardPage = () => {
   }, [totalSteps, integrationsStatus]);
   
   const handleDriveFoldersComplete = async (rootFolderId: string, archiveFolderId: string) => {
+    // Сохраняем folderId во временное состояние мастера
+    setWizardDriveFolders({ rootFolderId, archiveFolderId });
     // Обновляем formData с folder IDs
     setFormData(prev => ({
       ...prev,
@@ -296,9 +302,56 @@ const ChannelWizardPage = () => {
       driveArchiveFolderId: archiveFolderId
     }));
     
-    // Если канал уже создан, переходим к редактированию
-    if (createdChannelId) {
-      navigate(`/channels/${createdChannelId}/edit`, { replace: true });
+    // Если это последний шаг, создаём канал и переходим к редактированию
+    if (currentStep >= totalSteps) {
+      // Создаём канал с folderId
+      if (!user?.uid) {
+        setError("Пользователь не авторизован");
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Получаем настройки пользователя для подстановки defaultBlottataApiKey
+        let defaultBlottataApiKey: string | undefined = undefined;
+        try {
+          const userSettings = await getUserSettings();
+          if (userSettings.hasDefaultBlottataApiKey && userSettings.defaultBlottataApiKey) {
+            defaultBlottataApiKey = userSettings.defaultBlottataApiKey === "****" 
+              ? undefined 
+              : userSettings.defaultBlottataApiKey;
+          }
+        } catch (settingsError) {
+          console.warn("Failed to load user settings for default Blotato API key", settingsError);
+        }
+
+        const channelData: ChannelCreatePayload = {
+          ...formData,
+          generationTransport: formData.generationTransport || (telegramStatus?.status === "active" ? "telegram_user" : "telegram_global"),
+          blotataApiKey: formData.blotataApiKey || defaultBlottataApiKey,
+          googleDriveFolderId: rootFolderId,
+          driveInputFolderId: rootFolderId,
+          driveArchiveFolderId: archiveFolderId
+        };
+        const newChannel = await createChannel(user.uid, channelData);
+        navigate(`/channels/${newChannel.id}/edit`, { replace: true });
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Ошибка при создании канала"
+        );
+        setLoading(false);
+      }
+    } else {
+      // Переходим к следующему шагу
+      setCurrentStep(prev => {
+        if (prev < totalSteps) {
+          return prev + 1;
+        }
+        return prev;
+      });
+      setError(null);
     }
   };
 
@@ -530,28 +583,34 @@ const ChannelWizardPage = () => {
       }
 
       // Убеждаемся, что generationTransport установлен (если не был установлен ранее)
+      // Используем folderId из мастера, если они были созданы
       const channelData: ChannelCreatePayload = {
         ...formData,
         generationTransport: formData.generationTransport || (telegramStatus?.status === "active" ? "telegram_user" : "telegram_global"),
         // Подставляем defaultBlottataApiKey только если он не был явно указан
-        blotataApiKey: formData.blotataApiKey || defaultBlottataApiKey
+        blotataApiKey: formData.blotataApiKey || defaultBlottataApiKey,
+        // Используем folderId из мастера, если они были созданы
+        googleDriveFolderId: wizardDriveFolders?.rootFolderId || formData.googleDriveFolderId,
+        driveInputFolderId: wizardDriveFolders?.rootFolderId || formData.driveInputFolderId,
+        driveArchiveFolderId: wizardDriveFolders?.archiveFolderId || formData.driveArchiveFolderId
       };
       const newChannel = await createChannel(user.uid, channelData);
       setCreatedChannelId(newChannel.id);
       
-      // Переходим к шагу создания папок (если он есть) или к редактированию канала
-      const hasDriveFoldersStep = effectiveSteps.some(s => s.type === "drive_folders");
-      if (hasDriveFoldersStep) {
-        // Находим индекс шага создания папок
-        const foldersStepIndex = effectiveSteps.findIndex(s => s.type === "drive_folders");
-        if (foldersStepIndex !== -1) {
-          setCurrentStep(foldersStepIndex + 1);
-          setLoading(false);
+      // Проверяем, есть ли у пользователя Blotato API-ключ
+      try {
+        const userSettings = await getUserSettings();
+        if (!userSettings.hasDefaultBlottataApiKey || !userSettings.defaultBlottataApiKey) {
+          // Если API-ключа нет, перенаправляем на страницу настройки Blotato
+          navigate(`/channels/${newChannel.id}/blotato-setup`, { replace: true });
           return;
         }
+      } catch (settingsError) {
+        // Если не удалось проверить настройки, продолжаем обычный сценарий
+        console.warn("Failed to check user settings for Blotato API key", settingsError);
       }
       
-      // Если шага создания папок нет, переходим к редактированию канала
+      // Переходим к редактированию канала
       navigate(`/channels/${newChannel.id}/edit`, { replace: true });
     } catch (err) {
       setError(
@@ -585,17 +644,10 @@ const ChannelWizardPage = () => {
     }
     
     if (stepType === "drive_folders") {
-      if (!createdChannelId) {
-        return (
-          <div className="space-y-4">
-            <p className="text-sm text-slate-400">Сначала создайте канал...</p>
-          </div>
-        );
-      }
       return (
         <WizardDriveFoldersStep
-          channelId={createdChannelId}
           channelName={formData.name}
+          channelUuid={createdChannelId || undefined}
           onComplete={handleDriveFoldersComplete}
         />
       );
@@ -1028,7 +1080,7 @@ const ChannelWizardPage = () => {
 
       case 9:
         return (
-          <div className="space-y-2 md:space-y-4">
+          <div className="space-y-4 md:space-y-6">
             <div className="flex items-center gap-2">
               <label className="block text-xs font-medium text-slate-200 md:text-sm">
                 Режим генерации *
@@ -1043,7 +1095,13 @@ const ChannelWizardPage = () => {
                 label="Режим генерации"
               />
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 md:gap-4">
+            
+            <p className="text-xs text-slate-400 md:text-sm">
+              Выберите, что будет генерироваться при создании сценариев
+            </p>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 md:gap-5">
+              {/* Карточка "Сценарий" */}
               <button
                 type="button"
                 onClick={() =>
@@ -1052,17 +1110,30 @@ const ChannelWizardPage = () => {
                     generationMode: "script"
                   })
                 }
-                className={`relative min-h-[80px] rounded-xl border px-4 py-3 text-left transition-all shadow-lg md:rounded-2xl md:px-5 md:py-4 ${
+                className={`group relative min-h-[120px] rounded-2xl border-2 px-5 py-4 text-left transition-all duration-300 shadow-lg hover:scale-[1.02] md:min-h-[140px] md:rounded-3xl md:px-6 md:py-5 ${
                   formData.generationMode === "script"
-                    ? "border-brand bg-gradient-to-br from-brand/20 to-brand/10 text-white shadow-brand/20"
-                    : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-brand/40 hover:shadow-xl"
+                    ? "border-brand bg-gradient-to-br from-brand/30 via-brand/20 to-brand/10 text-white shadow-brand/30 ring-2 ring-brand/20"
+                    : "border-white/10 bg-gradient-to-br from-slate-900/80 to-slate-950/80 text-slate-300 hover:border-brand/50 hover:bg-gradient-to-br hover:from-slate-800/80 hover:to-slate-900/80 hover:shadow-xl hover:shadow-brand/10"
                 }`}
               >
-                <div className="text-sm font-bold md:text-base">Сценарий</div>
-                <div className="mt-1.5 text-[10px] text-slate-400 md:mt-2 md:text-xs">
-                  Только подробный сценарий
+                <div className="flex items-start gap-3">
+                  <div className={`flex-shrink-0 rounded-xl p-2.5 transition-all duration-300 ${
+                    formData.generationMode === "script"
+                      ? "bg-brand/30 text-brand-200"
+                      : "bg-slate-800/50 text-slate-400 group-hover:bg-brand/20 group-hover:text-brand-300"
+                  }`}>
+                    <FileText size={20} className="md:w-6 md:h-6" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold md:text-base">Сценарий</div>
+                    <div className="mt-2 text-[11px] leading-relaxed text-slate-400 md:mt-2.5 md:text-xs">
+                      Только подробный сценарий
+                    </div>
+                  </div>
                 </div>
               </button>
+
+              {/* Карточка "Сценарий + промпт для видео" */}
               <button
                 type="button"
                 onClick={() =>
@@ -1071,17 +1142,30 @@ const ChannelWizardPage = () => {
                     generationMode: "prompt"
                   })
                 }
-                className={`min-h-[80px] rounded-xl border px-4 py-3 text-left transition-all shadow-lg md:rounded-2xl md:px-5 md:py-4 ${
+                className={`group relative min-h-[120px] rounded-2xl border-2 px-5 py-4 text-left transition-all duration-300 shadow-lg hover:scale-[1.02] md:min-h-[140px] md:rounded-3xl md:px-6 md:py-5 ${
                   formData.generationMode === "prompt"
-                    ? "border-brand bg-gradient-to-br from-brand/20 to-brand/10 text-white shadow-brand/20"
-                    : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-brand/40 hover:shadow-xl"
+                    ? "border-brand bg-gradient-to-br from-brand/30 via-brand/20 to-brand/10 text-white shadow-brand/30 ring-2 ring-brand/20"
+                    : "border-white/10 bg-gradient-to-br from-slate-900/80 to-slate-950/80 text-slate-300 hover:border-brand/50 hover:bg-gradient-to-br hover:from-slate-800/80 hover:to-slate-900/80 hover:shadow-xl hover:shadow-brand/10"
                 }`}
               >
-                <div className="text-sm font-bold md:text-base">Сценарий + промпт для видео</div>
-                <div className="mt-1.5 text-[10px] text-slate-400 md:mt-2 md:text-xs">
-                  Сценарий + VIDEO_PROMPT для Sora/Veo
+                <div className="flex items-start gap-3">
+                  <div className={`flex-shrink-0 rounded-xl p-2.5 transition-all duration-300 ${
+                    formData.generationMode === "prompt"
+                      ? "bg-brand/30 text-brand-200"
+                      : "bg-slate-800/50 text-slate-400 group-hover:bg-brand/20 group-hover:text-brand-300"
+                  }`}>
+                    <FileText size={20} className="md:w-6 md:h-6" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold md:text-base">Сценарий + промпт для видео</div>
+                    <div className="mt-2 text-[11px] leading-relaxed text-slate-400 md:mt-2.5 md:text-xs">
+                      Сценарий + VIDEO_PROMPT для Sora/Veo
+                    </div>
+                  </div>
                 </div>
               </button>
+
+              {/* Карточка "Промпт для видео" с badge */}
               <button
                 type="button"
                 onClick={() =>
@@ -1090,33 +1174,49 @@ const ChannelWizardPage = () => {
                     generationMode: "video-prompt-only"
                   })
                 }
-                className={`relative min-h-[80px] rounded-xl border px-4 py-3 text-left transition-all shadow-lg md:rounded-2xl md:px-5 md:py-4 ${
+                className={`group relative min-h-[120px] rounded-2xl border-2 px-5 py-4 text-left transition-all duration-300 shadow-lg hover:scale-[1.02] md:min-h-[140px] md:rounded-3xl md:px-6 md:py-5 ${
                   (formData.generationMode || "video-prompt-only") === "video-prompt-only"
-                    ? "border-brand bg-gradient-to-br from-brand/20 to-brand/10 text-white shadow-brand/20"
-                    : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-brand/40 hover:shadow-xl"
+                    ? "border-brand bg-gradient-to-br from-brand/30 via-brand/20 to-brand/10 text-white shadow-brand/30 ring-2 ring-brand/20"
+                    : "border-white/10 bg-gradient-to-br from-slate-900/80 to-slate-950/80 text-slate-300 hover:border-brand/50 hover:bg-gradient-to-br hover:from-slate-800/80 hover:to-slate-900/80 hover:shadow-xl hover:shadow-brand/10"
                 }`}
               >
-                {/* Бейдж "Рекомендуется для автоматизации" */}
-                <div className="absolute right-2 top-2 rounded-full bg-gradient-to-r from-brand/30 to-brand/20 px-2.5 py-1 text-[9px] font-bold text-brand shadow-lg shadow-brand/20 md:right-3 md:top-3 md:px-3 md:text-[10px]">
-                  Рекомендуется для автоматизации
+                {/* Badge "Рекомендуется для автоматизации" - сверху слева */}
+                <div className="absolute left-3 top-3 z-10 md:left-4 md:top-4">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-500/30 via-emerald-400/25 to-emerald-500/30 px-2.5 py-1 text-[9px] font-semibold text-emerald-200 shadow-lg shadow-emerald-500/20 backdrop-blur-sm border border-emerald-400/30 md:px-3 md:py-1.5 md:text-[10px]">
+                    <Zap size={10} className="md:w-3 md:h-3" />
+                    <span>Рекомендуется</span>
+                  </div>
                 </div>
-                <div className="text-sm font-bold md:text-base pr-20 md:pr-24">Промпт для видео</div>
-                <div className="mt-1.5 text-[10px] text-slate-400 md:mt-2 md:text-xs">
-                  Только VIDEO_PROMPT для Sora/Veo без текста сценария
+
+                <div className="flex items-start gap-3 pt-6 md:pt-7">
+                  <div className={`flex-shrink-0 rounded-xl p-2.5 transition-all duration-300 ${
+                    (formData.generationMode || "video-prompt-only") === "video-prompt-only"
+                      ? "bg-brand/30 text-brand-200"
+                      : "bg-slate-800/50 text-slate-400 group-hover:bg-brand/20 group-hover:text-brand-300"
+                  }`}>
+                    <Video size={20} className="md:w-6 md:h-6" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold md:text-base">Промпт для видео</div>
+                    <div className="mt-2 text-[11px] leading-relaxed text-slate-400 md:mt-2.5 md:text-xs">
+                      Только VIDEO_PROMPT для Sora/Veo без текста сценария
+                    </div>
+                  </div>
                 </div>
               </button>
             </div>
-            <p className="text-xs text-slate-400 md:text-sm">
-              Выберите, что будет генерироваться при создании сценариев
-            </p>
-            <p className="text-xs text-slate-500 md:text-sm">
-              Для корректной работы автоматической генерации и публикации видео рекомендуется выбирать режим "Промпт для видео".
-            </p>
+            
+            {/* Информационная подсказка - под карточками */}
+            <div className="rounded-xl border border-brand/20 bg-gradient-to-r from-brand/10 via-brand/5 to-transparent px-4 py-3 md:rounded-2xl md:px-5 md:py-3.5">
+              <p className="text-xs leading-relaxed text-slate-300 md:text-sm">
+                <span className="font-semibold text-brand-300">💡 Совет:</span> Для корректной работы автоматической генерации и публикации видео рекомендуется выбирать режим <span className="font-semibold text-white">"Промпт для видео"</span>.
+              </p>
+            </div>
             
             {/* Предупреждение, если выбран не "video-prompt-only" */}
             {(formData.generationMode || "video-prompt-only") !== "video-prompt-only" && (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-900/20 px-3 py-2 text-xs text-amber-200 md:px-4 md:py-2.5 md:text-sm">
-                Обратите внимание: автоматизация канала (автогенерация и автопубликация видео) работает на основе режима "Промпт для видео". Если вы выбираете другой режим, часть функций может быть недоступна.
+              <div className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-900/20 via-amber-900/15 to-transparent px-4 py-3 text-xs leading-relaxed text-amber-200 shadow-lg shadow-amber-500/10 md:rounded-2xl md:px-5 md:py-3.5 md:text-sm">
+                <span className="font-semibold">⚠️ Обратите внимание:</span> Автоматизация канала (автогенерация и автопубликация видео) работает на основе режима "Промпт для видео". Если вы выбираете другой режим, часть функций может быть недоступна.
               </div>
             )}
           </div>

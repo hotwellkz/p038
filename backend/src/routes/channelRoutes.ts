@@ -1615,6 +1615,124 @@ router.post("/import", authRequired, async (req, res) => {
 });
 
 /**
+ * POST /api/wizard/generate-drive-folders
+ * Создаёт структуру папок Google Drive для канала в мастере (до создания канала в БД)
+ * Body: { channelName: string, channelUuid?: string }
+ */
+router.post("/wizard/generate-drive-folders", authRequired, async (req, res) => {
+  if (!isFirestoreAvailable() || !db) {
+    return res.status(503).json({
+      success: false,
+      error: "Firestore is not available",
+      message: "Firebase Admin не настроен"
+    });
+  }
+
+  try {
+    const userId = req.user!.uid;
+    const { channelName, channelUuid } = req.body as {
+      channelName?: string;
+      channelUuid?: string;
+    };
+
+    Logger.info("POST /api/channels/wizard/generate-drive-folders: start", {
+      userId,
+      channelName,
+      channelUuid
+    });
+
+    if (!channelName || typeof channelName !== "string" || channelName.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "INVALID_CHANNEL_NAME",
+        message: "Название канала обязательно"
+      });
+    }
+
+    // Проверяем статус Google Drive интеграции
+    const { getIntegrationStatus } = await import("../services/GoogleDriveOAuthService");
+    const integrationStatus = await getIntegrationStatus(userId);
+
+    if (!integrationStatus.connected) {
+      return res.status(400).json({
+        success: false,
+        error: "GOOGLE_DRIVE_NOT_CONNECTED",
+        message: "Сначала подключите Google Drive в настройках аккаунта"
+      });
+    }
+
+    // Создаём папки через сервис для мастера
+    const { createChannelFoldersForWizard } = await import("../services/googleDriveFolderService");
+    const folders = await createChannelFoldersForWizard({
+      userId,
+      channelName: channelName.trim(),
+      channelUuid
+    });
+
+    Logger.info("Channel folders generated for wizard", {
+      userId,
+      channelName,
+      rootFolderId: folders.rootFolderId,
+      archiveFolderId: folders.archiveFolderId
+    });
+
+    res.json({
+      success: true,
+      rootFolderId: folders.rootFolderId,
+      archiveFolderId: folders.archiveFolderId,
+      rootFolderName: folders.rootFolderName,
+      archiveFolderName: folders.archiveFolderName
+    });
+  } catch (error: any) {
+    Logger.error("Error in /api/channels/wizard/generate-drive-folders", {
+      error: error?.message || String(error),
+      errorCode: error?.code,
+      userId: req.user?.uid,
+      stack: error?.stack
+    });
+
+    // Обработка специфичных ошибок
+    if (error?.message?.includes("GOOGLE_DRIVE_NOT_CONNECTED")) {
+      return res.status(400).json({
+        success: false,
+        error: "GOOGLE_DRIVE_NOT_CONNECTED",
+        message: "Сначала подключите Google Drive в настройках аккаунта"
+      });
+    }
+
+    if (error?.message?.includes("GOOGLE_DRIVE_SERVICE_ACCOUNT_NOT_CONFIGURED")) {
+      return res.status(503).json({
+        success: false,
+        error: "SERVICE_ACCOUNT_NOT_CONFIGURED",
+        message: "Сервисный аккаунт Google Drive не настроен"
+      });
+    }
+
+    if (error?.message?.includes("GOOGLE_DRIVE_CREATE_FOLDER_FAILED")) {
+      return res.status(500).json({
+        success: false,
+        error: "CREATE_FOLDER_FAILED",
+        message: error.message.replace("GOOGLE_DRIVE_CREATE_FOLDER_FAILED: ", "")
+      });
+    }
+
+    if (error?.message?.includes("GOOGLE_DRIVE_SHARE_FAILED")) {
+      return res.status(500).json({
+        success: false,
+        error: "SHARE_FOLDER_FAILED",
+        message: error.message.replace("GOOGLE_DRIVE_SHARE_FAILED: ", "")
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: "INTERNAL_ERROR",
+      message: "Не удалось создать папки Google Drive"
+    });
+  }
+});
+
+/**
  * POST /api/channels/:id/generate-drive-folders
  * Создаёт структуру папок Google Drive для канала и автоматически заполняет поля
  */

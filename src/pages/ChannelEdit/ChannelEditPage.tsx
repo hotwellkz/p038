@@ -383,22 +383,22 @@ const ChannelEditPage = () => {
       }
     }
 
-    // Валидация настроек Blottata
+    // Валидация настроек Blotato
     if (channel.blotataEnabled) {
       if (!channel.driveInputFolderId || channel.driveInputFolderId.trim() === "") {
-        const errorMsg = "Для автопубликации через Blottata необходимо указать ID входной папки Google Drive";
+        const errorMsg = "Для автопубликации через Blotato необходимо указать ID входной папки Google Drive";
         setError(errorMsg);
         showError(errorMsg, 6000);
         return;
       }
       if (!channel.driveArchiveFolderId || channel.driveArchiveFolderId.trim() === "") {
-        const errorMsg = "Для автопубликации через Blottata необходимо указать ID папки архива Google Drive";
+        const errorMsg = "Для автопубликации через Blotato необходимо указать ID папки архива Google Drive";
         setError(errorMsg);
         showError(errorMsg, 6000);
         return;
       }
       if (!channel.blotataApiKey || channel.blotataApiKey.trim() === "") {
-        const errorMsg = "Для автопубликации через Blottata необходимо указать API ключ";
+        const errorMsg = "Для автопубликации через Blotato необходимо указать API ключ";
         setError(errorMsg);
         showError(errorMsg, 6000);
         return;
@@ -417,7 +417,7 @@ const ChannelEditPage = () => {
         channel.blotataBlueskyId;
       
       if (!hasPlatformId) {
-        const errorMsg = "Для автопубликации через Blottata необходимо указать хотя бы один ID площадки (YouTube, TikTok, Instagram и т.д.)";
+        const errorMsg = "Для автопубликации через Blotato необходимо указать хотя бы один ID площадки (YouTube, TikTok, Instagram и т.д.)";
         setError(errorMsg);
         showError(errorMsg, 6000);
         return;
@@ -1427,74 +1427,91 @@ const ChannelEditPage = () => {
 
             {/* Блок автоотправки в Syntx */}
             <div className="border-t border-white/10 pt-6">
-              <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-400">
-                Автоотправка в Syntx
-              </h3>
-              <p className="mb-4 text-xs text-slate-500">
-                Настройте автоматическую генерацию и отправку промптов в Syntx-бот по расписанию.
-              </p>
+              <Accordion
+                defaultOpen={false}
+                summary={
+                  <div className="flex items-center justify-between w-full">
+                    <div>
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                        Расписание автопубликаций и автоотправка в Syntx
+                      </h3>
+                      {!channel.autoSendEnabled ? (
+                        <p className="mt-1 text-xs text-slate-500">Автоотправка выключена</p>
+                      ) : (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {channel.autoSendSchedules?.filter(s => s.enabled).length || 0} активных расписаний, временная зона: {channel.timezone || "Asia/Almaty"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                }
+              >
+                <div className="mt-4 space-y-6">
+                  <p className="text-xs text-slate-500">
+                    Настройте автоматическую генерацию и отправку промптов в Syntx-бот по расписанию.
+                  </p>
 
-              {/* Переключатель включения автоотправки */}
-              <div className="mb-6 flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="autoSendEnabled"
-                  checked={channel.autoSendEnabled || false}
-                  onChange={(e) =>
-                    setChannel({
-                      ...channel,
-                      autoSendEnabled: e.target.checked
-                    })
-                  }
-                  className="h-5 w-5 rounded border-white/20 bg-slate-950/60 text-brand focus:ring-2 focus:ring-brand/40"
-                />
-                <label
-                  htmlFor="autoSendEnabled"
-                  className="text-sm font-medium text-slate-200"
-                >
-                  Включить автоотправку в Syntx
-                </label>
-              </div>
-
-              {channel.autoSendEnabled && (
-                <>
-                  {/* Выбор таймзоны */}
-                  <div className="mb-6 space-y-2">
-                    <label className="flex items-center gap-2 text-sm font-medium text-slate-200">
-                      <span>Временная зона</span>
-                      <FieldHelpIcon
-                        fieldKey="channel.timezone"
-                        page="channelEdit"
-                        channelContext={{
-                          name: channel.name,
-                          platform: channel.platform,
-                          language: channel.language,
-                          autoSendEnabled: channel.autoSendEnabled
-                        }}
-                        currentValue={channel.timezone}
-                        label="Временная зона"
-                      />
-                    </label>
-                    <select
-                      value={channel.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}
+                  {/* Переключатель включения автоотправки */}
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="autoSendEnabled"
+                      checked={channel.autoSendEnabled || false}
                       onChange={(e) =>
                         setChannel({
                           ...channel,
-                          timezone: e.target.value
+                          autoSendEnabled: e.target.checked
                         })
                       }
-                      className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/40"
+                      className="h-5 w-5 rounded border-white/20 bg-slate-950/60 text-brand focus:ring-2 focus:ring-brand/40"
+                    />
+                    <label
+                      htmlFor="autoSendEnabled"
+                      className="text-sm font-medium text-slate-200"
                     >
-                      <option value="Asia/Almaty">Asia/Almaty (Алматы)</option>
-                      <option value="Europe/Moscow">Europe/Moscow (Москва)</option>
-                      <option value="UTC">UTC</option>
-                      <option value="America/New_York">America/New_York (Нью-Йорк)</option>
-                      <option value="Europe/London">Europe/London (Лондон)</option>
-                    </select>
-                    <p className="text-xs text-slate-400">
-                      Выберите временную зону для расписания. По умолчанию используется зона вашего браузера.
-                    </p>
+                      Включить автоотправку в Syntx
+                    </label>
                   </div>
+
+                  {channel.autoSendEnabled && (
+                    <>
+                      {/* Выбор таймзоны */}
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                          <span>Временная зона</span>
+                          <FieldHelpIcon
+                            fieldKey="channel.timezone"
+                            page="channelEdit"
+                            channelContext={{
+                              name: channel.name,
+                              platform: channel.platform,
+                              language: channel.language,
+                              autoSendEnabled: channel.autoSendEnabled
+                            }}
+                            currentValue={channel.timezone}
+                            label="Временная зона"
+                          />
+                        </label>
+                        <select
+                          value={channel.timezone || "Asia/Almaty"}
+                          onChange={(e) =>
+                            setChannel({
+                              ...channel,
+                              timezone: e.target.value
+                            })
+                          }
+                          className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/40"
+                        >
+                          <option value="Asia/Almaty">Asia/Almaty (Алматы)</option>
+                          <option value="Europe/Moscow">Europe/Moscow (Москва)</option>
+                          <option value="UTC">UTC</option>
+                          <option value="America/New_York">America/New_York (Нью-Йорк)</option>
+                          <option value="Europe/London">Europe/London (Лондон)</option>
+                        </select>
+                        <p className="text-xs text-slate-400">
+                          Выберите временную зону для расписания. По умолчанию используется Asia/Almaty.
+                        </p>
+                      </div>
 
                   {/* Список расписаний */}
                   <div className="space-y-4">
@@ -1736,22 +1753,47 @@ const ChannelEditPage = () => {
                         </div>
                       ))
                     )}
-                  </div>
-                </>
-              )}
+                    </div>
+                  </>
+                )}
+              </div>
+              </Accordion>
             </div>
 
             {/* Блок автоматического скачивания в Google Drive */}
             <div className="border-t border-white/10 pt-6">
-              <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-400">
-                Автоматическое скачивание в Google Drive
-              </h3>
-              <p className="mb-4 text-xs text-slate-500">
-                Настройте автоматическое скачивание видео из Telegram и загрузку в Google Drive после автогенерации промпта.
-              </p>
+              <Accordion
+                defaultOpen={false}
+                summary={
+                  <div className="flex items-center justify-between w-full">
+                    <div>
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                        Автоматическое скачивание в Google Drive
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {channel.autoDownloadToDriveEnabled ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2 py-0.5 text-emerald-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                            Включено
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-700/50 px-2 py-0.5 text-slate-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-500"></span>
+                            Выключено
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                }
+              >
+                <div className="space-y-6">
+                  <p className="text-xs text-slate-500">
+                    Настройте автоматическое скачивание видео из Telegram и загрузку в Google Drive после автогенерации промпта.
+                  </p>
 
-              {/* Переключатель включения автоскачивания */}
-              <div className="mb-6 flex items-center gap-3">
+                  {/* Переключатель включения автоскачивания */}
+                  <div className="flex items-center gap-3">
                 <input
                   type="checkbox"
                   id="autoDownloadToDriveEnabled"
@@ -1828,19 +1870,44 @@ const ChannelEditPage = () => {
                   )}
                 </div>
               )}
+                </div>
+              </Accordion>
             </div>
 
             {/* Блок уведомлений */}
             <div className="border-t border-white/10 pt-6">
-              <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-400">
-                Уведомления
-              </h3>
-              <p className="mb-4 text-xs text-slate-500">
-                Настройте уведомления в Telegram после успешной загрузки видео на Google Drive.
-              </p>
+              <Accordion
+                defaultOpen={false}
+                summary={
+                  <div className="flex items-center justify-between w-full">
+                    <div>
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                        Уведомления в Telegram
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {channel.uploadNotificationEnabled ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2 py-0.5 text-emerald-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                            Включены
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-700/50 px-2 py-0.5 text-slate-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-500"></span>
+                            Выключены
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                }
+              >
+                <div className="space-y-6">
+                  <p className="text-xs text-slate-500">
+                    Настройте уведомления в Telegram после успешной загрузки видео на Google Drive.
+                  </p>
 
-              {/* Чекбокс включения уведомлений */}
-              <div className="mb-4 flex items-center gap-3">
+                  {/* Чекбокс включения уведомлений */}
+                  <div className="flex items-center gap-3">
                 <input
                   type="checkbox"
                   id="uploadNotificationEnabled"
@@ -1894,19 +1961,21 @@ const ChannelEditPage = () => {
                   Если поле пустое — будет использован тот же чат, что и для отправки промптов в SyntX.
                 </p>
               </div>
+                </div>
+              </Accordion>
             </div>
 
-            {/* Блок автоматической публикации через Blottata */}
+            {/* Блок автоматической публикации через Blotato */}
             <div className="border-t border-white/10 pt-6">
               <h3 className="mb-4 text-lg font-semibold text-white">
-                Автоматическая публикация через Blottata
+                Автоматическая публикация через Blotato
               </h3>
               <p className="mb-4 text-sm text-slate-400">
-                Настройте автоматическую публикацию видео в социальные сети через Blottata API. 
+                Настройте автоматическую публикацию видео в социальные сети через Blotato API. 
                 Файлы из указанной входной папки Google Drive будут автоматически публиковаться на выбранные платформы.
               </p>
 
-              {/* Переключатель включения Blottata */}
+              {/* Переключатель включения Blotato */}
               <div className="mb-6 flex items-center gap-3">
                 <input
                   type="checkbox"
@@ -1924,7 +1993,7 @@ const ChannelEditPage = () => {
                   htmlFor="blotataEnabled"
                   className="text-sm font-medium text-slate-200"
                 >
-                  Включить автоматическую публикацию через Blottata
+                  Включить автоматическую публикацию через Blotato
                 </label>
               </div>
 
@@ -1998,10 +2067,10 @@ const ChannelEditPage = () => {
                     </p>
                   </div>
 
-                  {/* Blottata API Key */}
+                  {/* Blotato API Key */}
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-sm font-medium text-slate-200">
-                      <span>Blottata API Key *</span>
+                      <span>Blotato API Key *</span>
                       <FieldHelpIcon
                         fieldKey="channel.blotataApiKey"
                         page="channelEdit"
@@ -2012,7 +2081,7 @@ const ChannelEditPage = () => {
                           blotataEnabled: channel.blotataEnabled
                         }}
                         currentValue={channel.blotataApiKey ? "***" : ""}
-                        label="Blottata API Key"
+                        label="Blotato API Key"
                       />
                     </label>
                     <input
@@ -2028,14 +2097,14 @@ const ChannelEditPage = () => {
                       className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/40"
                     />
                     <p className="text-xs text-slate-400">
-                      API ключ для доступа к Blottata. Если не указан, будет использован ключ из настроек сервера.
+                      API ключ для доступа к Blotato. Если не указан, будет использован ключ из настроек сервера.
                     </p>
                   </div>
 
                   {/* ID площадок */}
                   <div className="space-y-4">
                     <h4 className="text-sm font-semibold text-slate-200">
-                      ID аккаунтов в Blottata (укажите хотя бы один)
+                      ID аккаунтов в Blotato (укажите хотя бы один)
                     </h4>
                     
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -2052,7 +2121,7 @@ const ChannelEditPage = () => {
                               blotataEnabled: channel.blotataEnabled
                             }}
                             currentValue={channel.blotataYoutubeId}
-                            label="YouTube ID в Blottata"
+                            label="YouTube ID в Blotato"
                           />
                         </label>
                         <input
@@ -2082,7 +2151,7 @@ const ChannelEditPage = () => {
                               blotataEnabled: channel.blotataEnabled
                             }}
                             currentValue={channel.blotataTiktokId}
-                            label="TikTok ID в Blottata"
+                            label="TikTok ID в Blotato"
                           />
                         </label>
                         <input
@@ -2112,7 +2181,7 @@ const ChannelEditPage = () => {
                               blotataEnabled: channel.blotataEnabled
                             }}
                             currentValue={channel.blotataInstagramId}
-                            label="Instagram ID в Blottata"
+                            label="Instagram ID в Blotato"
                           />
                         </label>
                         <input
@@ -2142,7 +2211,7 @@ const ChannelEditPage = () => {
                               blotataEnabled: channel.blotataEnabled
                             }}
                             currentValue={channel.blotataFacebookId}
-                            label="Facebook ID в Blottata"
+                            label="Facebook ID в Blotato"
                           />
                         </label>
                         <input
@@ -2172,7 +2241,7 @@ const ChannelEditPage = () => {
                               blotataEnabled: channel.blotataEnabled
                             }}
                             currentValue={channel.blotataFacebookPageId}
-                            label="Facebook Page ID в Blottata"
+                            label="Facebook Page ID в Blotato"
                           />
                         </label>
                         <input
@@ -2202,7 +2271,7 @@ const ChannelEditPage = () => {
                               blotataEnabled: channel.blotataEnabled
                             }}
                             currentValue={channel.blotataThreadsId}
-                            label="Threads ID в Blottata"
+                            label="Threads ID в Blotato"
                           />
                         </label>
                         <input
@@ -2232,7 +2301,7 @@ const ChannelEditPage = () => {
                               blotataEnabled: channel.blotataEnabled
                             }}
                             currentValue={channel.blotataTwitterId}
-                            label="Twitter ID в Blottata"
+                            label="Twitter ID в Blotato"
                           />
                         </label>
                         <input
@@ -2262,7 +2331,7 @@ const ChannelEditPage = () => {
                               blotataEnabled: channel.blotataEnabled
                             }}
                             currentValue={channel.blotataLinkedinId}
-                            label="LinkedIn ID в Blottata"
+                            label="LinkedIn ID в Blotato"
                           />
                         </label>
                         <input
@@ -2292,7 +2361,7 @@ const ChannelEditPage = () => {
                               blotataEnabled: channel.blotataEnabled
                             }}
                             currentValue={channel.blotataPinterestId}
-                            label="Pinterest ID в Blottata"
+                            label="Pinterest ID в Blotato"
                           />
                         </label>
                         <input
@@ -2322,7 +2391,7 @@ const ChannelEditPage = () => {
                               blotataEnabled: channel.blotataEnabled
                             }}
                             currentValue={channel.blotataPinterestBoardId}
-                            label="Pinterest Board ID в Blottata"
+                            label="Pinterest Board ID в Blotato"
                           />
                         </label>
                         <input
@@ -2352,7 +2421,7 @@ const ChannelEditPage = () => {
                               blotataEnabled: channel.blotataEnabled
                             }}
                             currentValue={channel.blotataBlueskyId}
-                            label="Bluesky ID в Blottata"
+                            label="Bluesky ID в Blotato"
                           />
                         </label>
                         <input
@@ -2371,7 +2440,7 @@ const ChannelEditPage = () => {
                     </div>
 
                     <p className="text-xs text-slate-400">
-                      Укажите ID аккаунтов в Blottata для платформ, на которые нужно публиковать видео. 
+                      Укажите ID аккаунтов в Blotato для платформ, на которые нужно публиковать видео. 
                       Если ID не указан, публикация на эту платформу не будет выполняться.
                     </p>
                   </div>
@@ -2392,7 +2461,7 @@ const ChannelEditPage = () => {
                       ) : (
                         <>
                           <Play size={16} />
-                          Протестировать Blottata автоматизацию
+                          Протестировать Blotato автоматизацию
                         </>
                       )}
                     </button>

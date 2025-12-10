@@ -2,10 +2,10 @@ import { useState, ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 
 interface AccordionProps {
-  title: string;
+  title?: string; // Опционально, если используется summary как ReactNode
   children: ReactNode;
   defaultOpen?: boolean;
-  summary?: string; // Краткое описание для свернутого состояния
+  summary?: string | ReactNode; // Краткое описание для свернутого состояния (строка или ReactNode)
   className?: string;
 }
 
@@ -28,12 +28,16 @@ export const Accordion = ({
         onClick={() => setIsOpen(!isOpen)}
         className="flex w-full items-center justify-between gap-3 p-4 text-left transition-all duration-200 hover:bg-slate-800/40 cursor-pointer"
         aria-expanded={isOpen}
-        aria-controls={`accordion-content-${title}`}
+        aria-controls={`accordion-content-${typeof summary === 'string' ? (title || 'accordion') : 'accordion'}`}
       >
         <div className="flex-1">
-          <div className="text-sm font-semibold text-white">{title}</div>
-          {summary && !isOpen && (
-            <div className="mt-1 text-xs text-slate-400">{summary}</div>
+          {typeof summary === 'string' && title && (
+            <div className="text-sm font-semibold text-white">{title}</div>
+          )}
+          {summary && (
+            <div className={`${typeof summary === 'string' && title ? 'mt-1' : ''} ${typeof summary === 'string' ? 'text-xs text-slate-400' : ''}`}>
+              {summary}
+            </div>
           )}
         </div>
         <ChevronDown
@@ -43,7 +47,7 @@ export const Accordion = ({
         />
       </button>
       <div
-        id={`accordion-content-${title}`}
+        id={`accordion-content-${typeof summary === 'string' ? (title || 'accordion') : 'accordion'}`}
         className={`overflow-hidden transition-all duration-300 ease-in-out ${
           isOpen ? "max-h-[5000px] opacity-100" : "max-h-0 opacity-0"
         }`}

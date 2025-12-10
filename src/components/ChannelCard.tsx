@@ -149,7 +149,7 @@ const ChannelCard = ({
     ? "text-blue-300"
     : "";
 
-  // Получаем список подключенных платформ Blottata
+  // Получаем список подключенных платформ Blotato
   const getBlottataPlatforms = (): string[] => {
     const platforms: string[] = [];
     if (channel.blotataYoutubeId) platforms.push("YouTube");
@@ -223,7 +223,7 @@ const ChannelCard = ({
             <div className="truncate text-sm font-semibold text-white drop-shadow-sm">
               {number}. {channel.name}
             </div>
-            {/* Бейдж Blottata */}
+            {/* Бейдж Blotato */}
             {isBlottataEnabled && (
               <div 
                 className="relative"
@@ -233,12 +233,12 @@ const ChannelCard = ({
               >
                 <div className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
                   <Zap size={10} className="text-emerald-400" />
-                  <span>Blottata авто: ВКЛ</span>
+                  <span>Blotato авто: ВКЛ</span>
                 </div>
                 {/* Tooltip */}
                 {showBlottataTooltip && (
                   <div className="absolute left-0 top-full mt-1 z-50 w-48 rounded-lg border border-white/20 bg-slate-900/95 backdrop-blur-sm p-2 shadow-xl text-xs">
-                    <div className="font-semibold text-white mb-1">Автопубликация Blottata</div>
+                    <div className="font-semibold text-white mb-1">Автопубликация Blotato</div>
                     {blottataPlatforms.length > 0 ? (
                       <div className="text-slate-300">
                         <div className="mb-1">Платформы:</div>
@@ -481,7 +481,7 @@ const ChannelCard = ({
                 <div className="text-[15px] sm:text-base font-semibold text-white truncate leading-tight drop-shadow-sm">
                   {number}. {channel.name}
                 </div>
-                {/* Бейдж Blottata для мобильной версии */}
+                {/* Бейдж Blotato для мобильной версии */}
                 {isBlottataEnabled && (
                   <div 
                     className="relative"
@@ -489,12 +489,12 @@ const ChannelCard = ({
                   >
                     <div className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 text-[9px] sm:text-[10px] font-medium text-emerald-300">
                       <Zap size={9} className="text-emerald-400" />
-                      <span>Blottata: ВКЛ</span>
+                      <span>Blotato: ВКЛ</span>
                     </div>
                     {/* Tooltip для мобильной версии */}
                     {showBlottataTooltip && (
                       <div className="absolute left-0 top-full mt-1 z-50 w-48 rounded-lg border border-white/20 bg-slate-900/95 backdrop-blur-sm p-2 shadow-xl text-xs">
-                        <div className="font-semibold text-white mb-1">Автопубликация Blottata</div>
+                        <div className="font-semibold text-white mb-1">Автопубликация Blotato</div>
                         {blottataPlatforms.length > 0 ? (
                           <div className="text-slate-300">
                             <div className="mb-1">Платформы:</div>

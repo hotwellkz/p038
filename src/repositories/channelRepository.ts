@@ -12,8 +12,44 @@ import {
   updateDoc
 } from "firebase/firestore";
 import { db } from "../services/firebase";
-import type { Channel, ChannelCreatePayload } from "../domain/channel";
+import type { Channel, ChannelCreatePayload, ChannelAutoSendSchedule } from "../domain/channel";
 import { channelConverter } from "../domain/channel";
+
+/**
+ * Создаёт 4 расписания по умолчанию для нового канала
+ */
+function createDefaultSchedules(): ChannelAutoSendSchedule[] {
+  return [
+    {
+      id: crypto.randomUUID(),
+      enabled: true,
+      daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Все дни недели
+      time: "12:00",
+      promptsPerRun: 1
+    },
+    {
+      id: crypto.randomUUID(),
+      enabled: true,
+      daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Все дни недели
+      time: "15:00",
+      promptsPerRun: 1
+    },
+    {
+      id: crypto.randomUUID(),
+      enabled: true,
+      daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Все дни недели
+      time: "18:00",
+      promptsPerRun: 1
+    },
+    {
+      id: crypto.randomUUID(),
+      enabled: true,
+      daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Все дни недели
+      time: "21:00",
+      promptsPerRun: 1
+    }
+  ];
+}
 
 const channelCollection = (uid: string) =>
   collection(db, "users", uid, "channels").withConverter(channelConverter);
@@ -72,9 +108,14 @@ export const channelRepository: ChannelRepository = {
       generationTransport: data.generationTransport || "telegram_global",
       telegramAutoSendEnabled: data.telegramAutoSendEnabled ?? false,
       telegramAutoScheduleEnabled: data.telegramAutoScheduleEnabled ?? false,
-      autoSendEnabled: data.autoSendEnabled ?? false,
-      autoSendSchedules: data.autoSendSchedules ?? [],
-      autoDownloadToDriveEnabled: data.autoDownloadToDriveEnabled ?? false,
+      // Для новых каналов: autoSendEnabled по умолчанию true, если не указано явно
+      autoSendEnabled: data.autoSendEnabled !== undefined ? data.autoSendEnabled : true,
+      // Создаём 4 расписания по умолчанию, если расписаний нет
+      autoSendSchedules: data.autoSendSchedules && data.autoSendSchedules.length > 0 
+        ? data.autoSendSchedules 
+        : createDefaultSchedules(),
+      // Для новых каналов: autoDownloadToDriveEnabled по умолчанию true, если не указано явно
+      autoDownloadToDriveEnabled: data.autoDownloadToDriveEnabled !== undefined ? data.autoDownloadToDriveEnabled : true,
       autoDownloadDelayMinutes: data.autoDownloadDelayMinutes ?? 10,
       uploadNotificationEnabled: data.uploadNotificationEnabled ?? false,
       uploadNotificationChatId: data.uploadNotificationChatId ?? null,
@@ -87,7 +128,8 @@ export const channelRepository: ChannelRepository = {
       tiktokUrl: data.tiktokUrl,
       instagramUrl: data.instagramUrl,
       googleDriveFolderId: data.googleDriveFolderId,
-      timezone: data.timezone
+      // Для новых каналов: timezone по умолчанию "Asia/Almaty", если не указано явно
+      timezone: data.timezone || "Asia/Almaty"
     };
     
     // addDoc с конвертером автоматически вызовет toFirestore(), который отфильтрует undefined

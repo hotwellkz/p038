@@ -90,21 +90,21 @@ export function BlottataApiKeySettings() {
   return (
     <div className="border-t border-white/10 pt-6">
       <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold">Blottata API ключ (по умолчанию)</h2>
+        <h2 className="text-lg font-semibold">Blotato API ключ (по умолчанию)</h2>
         <SectionHelpButton
           sectionKey="blottata_api_key_default"
-          sectionTitle="Blottata API ключ (по умолчанию)"
+          sectionTitle="Blotato API ключ (по умолчанию)"
           context={{
             hasExistingKey
           }}
         />
       </div>
       <p className="mt-2 text-xs text-slate-400">
-        Укажите API-ключ Blottata один раз. При создании новых каналов это значение будет автоматически подставлено в поле «Blottata API Key» в настройках канала. Ключ можно переопределить для конкретного канала.
+        Укажите API-ключ Blotato один раз. При создании новых каналов это значение будет автоматически подставлено в поле «Blotato API Key» в настройках канала. Ключ можно переопределить для конкретного канала.
       </p>
       {!hasExistingKey && (
         <p className="mt-1 text-xs text-amber-400/80">
-          Если это поле оставить пустым, при создании новых каналов Blottata API Key придётся указывать вручную.
+          Если это поле оставить пустым, при создании новых каналов Blotato API Key придётся указывать вручную.
         </p>
       )}
 
@@ -114,7 +114,7 @@ export function BlottataApiKeySettings() {
             type={showApiKey ? "text" : "password"}
             value={apiKey}
             onChange={handleInputChange}
-            placeholder="Введите API ключ Blottata"
+            placeholder="Введите API ключ Blotato"
             className="w-full rounded-lg border border-white/10 bg-slate-800/60 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-brand/50 focus:outline-none focus:ring-2 focus:ring-brand/20"
             disabled={saving}
           />

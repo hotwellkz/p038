@@ -234,11 +234,11 @@ const ChannelCardCompact = ({
             {platformLabels[channel.platform]} · {languageLabels[channel.language]}
           </div>
 
-          {/* Blottata бейдж */}
+          {/* Blotato бейдж */}
           {isBlottataEnabled && (
             <div className="flex-shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5">
               <Zap size={10} className="text-emerald-400" />
-              <span className="text-[10px] font-medium text-emerald-300">Blottata</span>
+              <span className="text-[10px] font-medium text-emerald-300">Blotato</span>
             </div>
           )}
 
@@ -328,7 +328,7 @@ const ChannelCardCompact = ({
             {isBlottataEnabled && (
               <div className="flex-shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5">
                 <Zap size={9} className="text-emerald-400" />
-                <span className="text-[9px] font-medium text-emerald-300">Blottata</span>
+                <span className="text-[9px] font-medium text-emerald-300">Blotato</span>
               </div>
             )}
           </div>

@@ -14,7 +14,7 @@ export interface TestBlottataResponse {
 }
 
 /**
- * Тестирует Blottata автоматизацию для канала
+ * Тестирует Blotato автоматизацию для канала
  * @param channelId - ID канала
  * @param fileId - Опциональный ID файла для тестирования
  */
@@ -39,7 +39,7 @@ export async function testBlottata(
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(
-      error.message || `Ошибка при тестировании Blottata: ${response.status}`
+      error.message || `Ошибка при тестировании Blotato: ${response.status}`
     );
   }
 

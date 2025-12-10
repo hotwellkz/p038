@@ -36,21 +36,21 @@ function getBaseFieldDescription(fieldKey: string): string | undefined {
     "channel.autoSendSchedules.time": "Время отправки промптов в формате HH:MM (например: 12:00, 18:30). Учитывается временная зона канала",
     "channel.autoSendSchedules.daysOfWeek": "Дни недели для отправки промптов. Массив чисел от 0 (воскресенье) до 6 (суббота). Можно выбрать несколько дней",
     "channel.autoSendSchedules.promptsPerRun": "Количество промптов, которые будут отправлены за один запуск расписания. Значение от 1 до 10",
-    "channel.blotataEnabled": "Включена ли автоматическая публикация видео через Blottata API",
-    "channel.driveInputFolderId": "ID папки Google Drive, откуда брать готовые видео для публикации через Blottata. Система отслеживает новые файлы в этой папке",
-    "channel.driveArchiveFolderId": "ID папки Google Drive, куда перемещать обработанные видео после публикации через Blottata",
-    "channel.blotataApiKey": "API ключ для доступа к Blottata сервису. Формат: blt_... Если не указан, используется ключ из настроек сервера",
-    "channel.blotataYoutubeId": "ID YouTube аккаунта в системе Blottata - числовой идентификатор площадки для публикации",
-    "channel.blotataTiktokId": "ID TikTok аккаунта в системе Blottata - числовой идентификатор площадки для публикации",
-    "channel.blotataInstagramId": "ID Instagram аккаунта в системе Blottata - числовой идентификатор площадки для публикации",
-    "channel.blotataFacebookId": "ID Facebook аккаунта в системе Blottata - числовой идентификатор площадки для публикации",
-    "channel.blotataFacebookPageId": "ID Facebook страницы в системе Blottata - числовой идентификатор страницы для публикации",
-    "channel.blotataThreadsId": "ID Threads аккаунта в системе Blottata - числовой идентификатор площадки для публикации",
-    "channel.blotataTwitterId": "ID Twitter/X аккаунта в системе Blottata - числовой идентификатор площадки для публикации",
-    "channel.blotataLinkedinId": "ID LinkedIn аккаунта в системе Blottata - числовой идентификатор площадки для публикации",
-    "channel.blotataPinterestId": "ID Pinterest аккаунта в системе Blottata - числовой идентификатор площадки для публикации",
-    "channel.blotataPinterestBoardId": "ID доски Pinterest в системе Blottata - числовой идентификатор конкретной доски для публикации",
-    "channel.blotataBlueskyId": "ID Bluesky аккаунта в системе Blottata - числовой идентификатор площадки для публикации",
+    "channel.blotataEnabled": "Включена ли автоматическая публикация видео через Blotato API",
+    "channel.driveInputFolderId": "ID папки Google Drive, откуда брать готовые видео для публикации через Blotato. Система отслеживает новые файлы в этой папке",
+    "channel.driveArchiveFolderId": "ID папки Google Drive, куда перемещать обработанные видео после публикации через Blotato",
+    "channel.blotataApiKey": "API ключ для доступа к Blotato сервису. Формат: blt_... Если не указан, используется ключ из настроек сервера",
+    "channel.blotataYoutubeId": "ID YouTube аккаунта в системе Blotato - числовой идентификатор площадки для публикации",
+    "channel.blotataTiktokId": "ID TikTok аккаунта в системе Blotato - числовой идентификатор площадки для публикации",
+    "channel.blotataInstagramId": "ID Instagram аккаунта в системе Blotato - числовой идентификатор площадки для публикации",
+    "channel.blotataFacebookId": "ID Facebook аккаунта в системе Blotato - числовой идентификатор площадки для публикации",
+    "channel.blotataFacebookPageId": "ID Facebook страницы в системе Blotato - числовой идентификатор страницы для публикации",
+    "channel.blotataThreadsId": "ID Threads аккаунта в системе Blotato - числовой идентификатор площадки для публикации",
+    "channel.blotataTwitterId": "ID Twitter/X аккаунта в системе Blotato - числовой идентификатор площадки для публикации",
+    "channel.blotataLinkedinId": "ID LinkedIn аккаунта в системе Blotato - числовой идентификатор площадки для публикации",
+    "channel.blotataPinterestId": "ID Pinterest аккаунта в системе Blotato - числовой идентификатор площадки для публикации",
+    "channel.blotataPinterestBoardId": "ID доски Pinterest в системе Blotato - числовой идентификатор конкретной доски для публикации",
+    "channel.blotataBlueskyId": "ID Bluesky аккаунта в системе Blotato - числовой идентификатор площадки для публикации",
     "channel.uploadNotificationChatId": "Telegram chat ID для отправки уведомлений о загрузке видео на Google Drive. Если пусто, используется основной чат SyntX",
     "wizard.telegram_connection": "Шаг подключения Telegram в мастере создания канала. Позволяет привязать личный Telegram аккаунт для отправки промптов от имени пользователя",
     "wizard.google_drive_connection": "Шаг авторизации Google Drive в мастере создания канала. Позволяет подключить Google Drive для автоматической загрузки и хранения видео",
@@ -240,7 +240,7 @@ function getBaseSectionDescription(sectionKey: string): string | undefined {
     "google_drive_integration": "Интеграция с Google Drive позволяет автоматически загружать и хранить видео файлы, созданные системой. Это упрощает управление контентом и обеспечивает резервное копирование.",
     "generate_drive_folders": "Кнопка автоматического создания папок Google Drive для канала. Создаёт структуру папок и автоматически заполняет поля канала.",
     "profile": "Профиль пользователя содержит основную информацию об аккаунте: email, статус авторизации и настройки интеграций.",
-    "blottata_api_key_default": "Поле для хранения API ключа Blottata по умолчанию. Этот ключ автоматически подставляется в настройки новых каналов, но может быть переопределён для конкретного канала. Blottata — это сервис для автоматической публикации видео в различные социальные сети."
+    "blottata_api_key_default": "Поле для хранения API ключа Blotato по умолчанию. Этот ключ автоматически подставляется в настройки новых каналов, но может быть переопределён для конкретного канала. Blotato — это сервис для автоматической публикации видео в различные социальные сети."
   };
 
   return descriptions[sectionKey];
@@ -285,7 +285,7 @@ function buildSectionSystemPrompt(): string {
 — основную папку канала для готовых видео (название: "{channelName} — {channelId}")
 — папку uploaded для архива (внутри основной папки)
 После создания система сама заполняет все нужные поля канала (Google Drive Folder ID, ID входной папки, ID папки архива) и выдаёт права доступа сервис-аккаунту для автоматической загрузки видео.
-Для section = "blottata_api_key_default" объясни, что это поле для хранения API ключа Blottata по умолчанию. Этот ключ автоматически подставляется в настройки новых каналов при их создании, но может быть переопределён для конкретного канала в его настройках. Blottata — это сервис для автоматической публикации видео в различные социальные сети (YouTube, TikTok, Instagram и др.). Если это поле оставить пустым, при создании новых каналов API ключ придётся указывать вручную для каждого канала.`;
+Для section = "blottata_api_key_default" объясни, что это поле для хранения API ключа Blotato по умолчанию. Этот ключ автоматически подставляется в настройки новых каналов при их создании, но может быть переопределён для конкретного канала в его настройках. Blotato — это сервис для автоматической публикации видео в различные социальные сети (YouTube, TikTok, Instagram и др.). Если это поле оставить пустым, при создании новых каналов API ключ придётся указывать вручную для каждого канала.`;
 }
 
 /**

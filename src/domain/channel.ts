@@ -73,14 +73,14 @@ export interface Channel {
   // Уведомления о загрузке видео в Google Drive
   uploadNotificationEnabled?: boolean; // по умолчанию false
   uploadNotificationChatId?: string | null; // необязательный chatId для уведомлений
-  // Автоматическая публикация через Blottata
-  blotataEnabled?: boolean; // включена ли автопубликация через Blottata
+  // Автоматическая публикация через Blotato
+  blotataEnabled?: boolean; // включена ли автопубликация через Blotato
   driveInputFolderId?: string; // ID папки Google Drive, где появляются готовые видео для этого канала
   driveArchiveFolderId?: string; // ID папки Google Drive, куда переносить отработанные файлы
-  blotataApiKey?: string; // API ключ для Blottata (может быть переопределен на уровне канала)
-  blotataYoutubeId?: string | null; // ID YouTube аккаунта в Blottata
-  blotataTiktokId?: string | null; // ID TikTok аккаунта в Blottata
-  blotataInstagramId?: string | null; // ID Instagram аккаунта в Blottata
+  blotataApiKey?: string; // API ключ для Blotato (может быть переопределен на уровне канала)
+  blotataYoutubeId?: string | null; // ID YouTube аккаунта в Blotato
+  blotataTiktokId?: string | null; // ID TikTok аккаунта в Blotato
+  blotataInstagramId?: string | null; // ID Instagram аккаунта в Blotato
   blotataFacebookId?: string | null;
   blotataFacebookPageId?: string | null;
   blotataThreadsId?: string | null;
@@ -123,6 +123,7 @@ export const channelConverter: FirestoreDataConverter<Channel> = {
       generationTransport: rest.generationTransport ?? "telegram_global",
       telegramSyntaxPeer: rest.telegramSyntaxPeer ?? null,
       // Явно устанавливаем autoSendEnabled, чтобы Firestore сохранил его
+      // Для существующих каналов сохраняем текущее значение
       autoSendEnabled: rest.autoSendEnabled ?? false,
       autoSendSchedules: rest.autoSendSchedules ?? [],
       createdAt: rest.createdAt ?? (serverTimestamp() as unknown as Timestamp),
@@ -319,10 +320,10 @@ export const createEmptyChannel = (): Channel => {
     googleDriveFolderId: undefined,
     telegramAutoSendEnabled: false,
     telegramAutoScheduleEnabled: false,
-    autoSendEnabled: false,
-    timezone: undefined,
-    autoSendSchedules: [],
-    autoDownloadToDriveEnabled: false,
+    autoSendEnabled: true, // По умолчанию включено для новых каналов
+    timezone: "Asia/Almaty", // По умолчанию Asia/Almaty для новых каналов
+    autoSendSchedules: [], // Будет заполнено при создании канала, если пусто
+    autoDownloadToDriveEnabled: true, // По умолчанию включено для новых каналов
     autoDownloadDelayMinutes: 10,
     uploadNotificationEnabled: false,
     uploadNotificationChatId: null,
