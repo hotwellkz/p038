@@ -3,6 +3,7 @@ import { Edit2, Save, X, Plus, Trash2, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { updateChannelSchedule, type ChannelScheduleItem } from "../api/channelSchedule";
 import type { ConflictKey } from "../utils/scheduleConflicts";
+import AutomationToggle from "./AutomationToggle";
 
 interface ChannelScheduleRowProps {
   item: ChannelScheduleItem;
@@ -18,6 +19,7 @@ interface ChannelScheduleRowProps {
   onUpdate: (updatedItem: ChannelScheduleItem) => void;
   onError: (message: string) => void;
   onSuccess: (message: string) => void;
+  onAutomationChange: (enabled: boolean) => Promise<void>;
   isMobile?: boolean;
 }
 
@@ -106,6 +108,7 @@ const ChannelScheduleRow = ({
   onUpdate,
   onError,
   onSuccess,
+  onAutomationChange,
   isMobile = false
 }: ChannelScheduleRowProps) => {
   const navigate = useNavigate();
@@ -276,11 +279,14 @@ const ChannelScheduleRow = ({
                 <div className="text-xs text-slate-400">{item.platform}</div>
               </button>
             </div>
-            {!item.isAutomationEnabled && (
-              <span className="mt-1 inline-block rounded bg-red-500/20 px-2 py-0.5 text-xs text-red-300">
-                Выключена
-              </span>
-            )}
+            <div className="mt-2 flex items-center gap-2">
+              <AutomationToggle
+                enabled={item.isAutomationEnabled}
+                onChange={onAutomationChange}
+                channelName={item.name}
+                disabled={isEditing}
+              />
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {!isEditing ? (
@@ -455,11 +461,16 @@ const ChannelScheduleRow = ({
           <div className="font-medium text-white">{item.name}</div>
           <div className="text-xs text-slate-400">{item.platform}</div>
         </button>
-        {!item.isAutomationEnabled && (
-          <span className="mt-1 inline-block rounded bg-red-500/20 px-2 py-0.5 text-xs text-red-300">
-            Выключена
-          </span>
-        )}
+      </td>
+      <td className="px-4 py-3 text-center align-middle">
+        <div className="flex items-center justify-center">
+          <AutomationToggle
+            enabled={item.isAutomationEnabled}
+            onChange={onAutomationChange}
+            channelName={item.name}
+            disabled={isEditing}
+          />
+        </div>
       </td>
       {visibleTimes.map((time, timeIndex) => {
         const hasTime = !!time;

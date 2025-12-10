@@ -316,6 +316,68 @@ router.patch("/:id/schedule", authRequired, async (req, res) => {
 });
 
 /**
+ * PATCH /api/channels/:id/automation
+ * Обновляет статус автоматизации канала
+ * Body: { autoSendEnabled: boolean }
+ */
+router.patch("/:id/automation", authRequired, async (req, res) => {
+  if (!isFirestoreAvailable() || !db) {
+    return res.status(503).json({
+      error: "Firestore is not available",
+      message: "Firebase Admin не настроен"
+    });
+  }
+
+  try {
+    const userId = req.user!.uid;
+    const channelId = req.params.id;
+    const { autoSendEnabled } = req.body;
+
+    if (typeof autoSendEnabled !== "boolean") {
+      return res.status(400).json({
+        error: "Invalid request",
+        message: "autoSendEnabled должен быть boolean"
+      });
+    }
+
+    // Проверяем, что канал существует и принадлежит пользователю
+    const channelRef = db.collection("users").doc(userId).collection("channels").doc(channelId);
+    const channelSnap = await channelRef.get();
+
+    if (!channelSnap.exists) {
+      return res.status(404).json({
+        error: "Channel not found",
+        message: "Канал не найден"
+      });
+    }
+
+    // Обновляем только поле autoSendEnabled
+    await channelRef.update({
+      autoSendEnabled,
+      updatedAt: new Date()
+    });
+
+    Logger.info("Channel automation updated", {
+      userId,
+      channelId,
+      autoSendEnabled
+    });
+
+    res.json({
+      success: true,
+      autoSendEnabled,
+      message: autoSendEnabled ? "Автоматизация включена" : "Автоматизация выключена"
+    });
+  } catch (error: any) {
+    Logger.error("Failed to update channel automation", error);
+    res.status(500).json({
+      error: "Internal server error",
+      message: error?.message || "Ошибка при обновлении автоматизации канала"
+    });
+  }
+});
+
+/**
  * POST /api/channels/:id/run-custom-prompt
  * Запускает генерацию видео с кастомным промптом от пользователя
  * Body: { prompt: string, title?: string }

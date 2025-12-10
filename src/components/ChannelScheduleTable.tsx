@@ -1,7 +1,9 @@
-import { useState } from "react";
 import type { ChannelScheduleItem } from "../api/channelSchedule";
 import type { ConflictKey } from "../utils/scheduleConflicts";
 import ChannelScheduleRow from "./ChannelScheduleRow";
+import { useToast } from "../hooks/useToast";
+import Toast from "./Toast";
+import { createPortal } from "react-dom";
 
 interface ChannelScheduleTableProps {
   items: ChannelScheduleItem[];
@@ -28,7 +30,7 @@ const ChannelScheduleTable = ({
   previousTime,
   previousElapsedSeconds
 }: ChannelScheduleTableProps) => {
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const { toasts, showError, showSuccess, removeToast } = useToast();
 
   // Находим максимальное количество времён для определения количества колонок
   const maxTimes = Math.max(...items.map((item) => item.times.length), 0);
@@ -43,28 +45,62 @@ const ChannelScheduleTable = ({
   };
 
   const handleError = (message: string) => {
-    setToast({ message, type: "error" });
-    setTimeout(() => setToast(null), 5000);
+    showError(message, 6000);
   };
 
   const handleSuccess = (message: string) => {
-    setToast({ message, type: "success" });
-    setTimeout(() => setToast(null), 3000);
+    showSuccess(message, 3000);
+  };
+
+  const handleAutomationUpdate = async (item: ChannelScheduleItem, enabled: boolean) => {
+    try {
+      const { updateChannelAutomation } = await import("../api/channelSchedule");
+      await updateChannelAutomation(item.id, enabled);
+      
+      // Обновляем локальное состояние
+      const updatedItems = items.map((i) =>
+        i.id === item.id ? { ...i, isAutomationEnabled: enabled } : i
+      );
+      onItemsUpdate(updatedItems);
+      
+      showSuccess(
+        enabled
+          ? `Автоматизация включена для канала "${item.name}"`
+          : `Автоматизация выключена для канала "${item.name}"`,
+        3000
+      );
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Ошибка при обновлении автоматизации";
+      showError(errorMsg, 6000);
+      throw error; // Пробрасываем для обработки в компоненте
+    }
   };
 
   return (
     <>
-      {toast && (
-        <div
-          className={`fixed top-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg ${
-            toast.type === "success"
-              ? "bg-green-500/90 text-white"
-              : "bg-red-500/90 text-white"
-          }`}
-        >
-          {toast.message}
-        </div>
-      )}
+      {/* Toast уведомления - фиксированная позиция сверху */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed left-0 right-0 top-0 z-[10002] pointer-events-none px-4 sm:px-6">
+            <div className="relative mx-auto max-w-md">
+              {toasts.map((toast, index) => (
+                <div
+                  key={toast.id}
+                  className="pointer-events-auto"
+                  style={{
+                    position: index === 0 ? "relative" : "absolute",
+                    top: index === 0 ? 0 : `${index * 80}px`,
+                    width: "100%",
+                    transition: "top 0.2s ease-out"
+                  }}
+                >
+                  <Toast toast={toast} onClose={removeToast} />
+                </div>
+              ))}
+            </div>
+          </div>,
+          document.body
+        )}
       {/* Десктопная версия - таблица */}
       <div className="hidden overflow-x-auto rounded-lg border border-white/10 bg-slate-900/50 md:block">
         <table className="w-full border-collapse">
@@ -75,6 +111,9 @@ const ChannelScheduleTable = ({
               </th>
               <th className="sticky left-[60px] z-10 bg-slate-800/50 px-4 py-3 text-left text-sm font-semibold text-slate-300">
                 Название канала
+              </th>
+              <th className="px-4 py-3 text-center text-sm font-semibold text-slate-300">
+                Автоматизация
               </th>
               {Array.from({ length: timeColumnsCount }, (_, i) => (
                 <th
@@ -111,6 +150,7 @@ const ChannelScheduleTable = ({
                 onUpdate={handleUpdate}
                 onError={handleError}
                 onSuccess={handleSuccess}
+                onAutomationChange={(enabled) => handleAutomationUpdate(item, enabled)}
               />
             ))}
           </tbody>
@@ -135,6 +175,7 @@ const ChannelScheduleTable = ({
             onUpdate={handleUpdate}
             onError={handleError}
             onSuccess={handleSuccess}
+            onAutomationChange={(enabled) => handleAutomationUpdate(item, enabled)}
             isMobile={true}
           />
         ))}

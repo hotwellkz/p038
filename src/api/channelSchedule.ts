@@ -62,6 +62,34 @@ export async function updateChannelSchedule(
 }
 
 /**
+ * Обновляет статус автоматизации канала
+ * @param channelId - ID канала
+ * @param autoSendEnabled - Включена ли автоматизация
+ */
+export async function updateChannelAutomation(
+  channelId: string,
+  autoSendEnabled: boolean
+): Promise<{ success: boolean; autoSendEnabled: boolean }> {
+  const token = await getAuthToken();
+  
+  const response = await fetch(`${backendBaseUrl}/api/channels/${channelId}/automation`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ autoSendEnabled })
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || `Ошибка при обновлении автоматизации: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
  * Получает токен авторизации из Firebase Auth
  */
 export async function getAuthToken(): Promise<string> {
